@@ -1,3794 +1,2971 @@
---------Join us for more https://t.me/AttcTrDevelopers---------@AttcConfigTechnician ---------
--- Ready-to-use script with all features and aggressive bypasses (Fully Integrated)
-local ENetRole = import("ENetRole")
-local EPawnState = import("EPawnState")
-local GameplayData = require("GameLua.GameCore.Data.GameplayData")
-local KismetMathLibrary = import("KismetMathLibrary")
-local GameplayStatics = import("GameplayStatics")
-local InGameMarkTools = require("GameLua.Mod.BaseMod.Common.InGameMarkTools")
-local GamePlayTools = require("GameLua.Mod.BaseMod.Common.GamePlayTools")
+-- ============================================================
+-- NOTIFICATION SYSTEM
+-- ============================================================
+local function Notify(msg) local s = "[BNTMOD VIP New] " .. tostring(msg)
+pcall(function() if _G.BNTMODNotify then _G.BNTMODNotify(s) end end)
+pcall(function() local sh = import("ScriptHelperClient") if sh and
+sh.AddOnScreenDebugMessage then sh.AddOnScreenDebugMessage(s, -1, 3.0, {R=1,
+G=1, B=0, A=1}, {X=1.2, Y=1.2}) end end) print(s) end
+
+local _slua = rawget(_G, "slua")
+local function Valid(obj) if not obj then return false end if _slua and
+_slua.isValid then local ok, v = pcall(_slua.isValid, obj) if not ok or not v
+then return false end end return true end
 
-local EXPIRY_TIMESTAMP = os.time({ year = 2026, month = 11, day = 20, hour = 1, min = 2, sec = 6 })
-
-local function FormatTimeRemaining(sec)
-    if sec <= 0 then return "0d 0h 0m 0s" end
-    local days = math.floor(sec / 86400); sec = sec % 86400
-    local hours = math.floor(sec / 3600); sec = sec % 3600
-    local minutes = math.floor(sec / 60)
-    local seconds = sec % 60
-    return string.format("%dd %dh %dm %ds", days, hours, minutes, seconds)
-end
-
-function CheckExpiration()
-    local now = os.time()
-    local remaining = EXPIRY_TIMESTAMP - now
-    if remaining <= 0 then
-        _G._MOD_EXPIRED = true
-        return false
-    end
-    _G._MOD_EXPIRED = false
-    _G._MOD_REMAINING_SECONDS = remaining
-    return true
-end
-
-local function ShowExpiryPopup(expired)
-    pcall(function()
-        local Msg = package.loaded["client.slua.logic.common.logic_common_msg_box"]
-            or require("client.slua.logic.common.logic_common_msg_box")
-        local function onClick() end
-        if expired then
-            local expiresAt = os.date("!%Y-%m-%d %H:%M:%S UTC", EXPIRY_TIMESTAMP)
-            Msg.Show(4, "MOD EXPIRED",
-                "THIS MOD HAS EXPIRED.\n\nEXPIRED ON: " .. expiresAt .. "\n\nVIP PAK MOD BUY@BABYNOOB9 ", onClick)
-        else
-            local remaining = _G._MOD_REMAINING_SECONDS or (EXPIRY_TIMESTAMP - os.time())
-            local formatted = FormatTimeRemaining(remaining)
-            local expiresAt = os.date("!%Y-%m-%d %H:%M:%S UTC", EXPIRY_TIMESTAMP)
-            Msg.Show(4, "NOTIFICATION",
-                "MOD VALIDITY: " .. formatted .. "\nEXPIRES AT: " .. expiresAt .. "\n\nFOR RENEWAL DM @BABYNOOB9 ", onClick)
-        end
-    end)
-end
-
-function _G.TryShowWelcome()
-    if _G.WelcomeShown then return end
-    if not CheckExpiration() then
-        ShowExpiryPopup(true)
-        return
-    end
-    ShowExpiryPopup(false)
-    _G.WelcomeShown = true
-end
-
-_G.AK_Features = {
-    { id = "ESP_HP",   name = "ESP Health Bar", val = 1, type = "toggle" },
-    { id = "ESP_BOX",  name = "ESP Box",        val = 1, type = "toggle" },
-    { id = "ESP_MAP",  name = "Mini Map ESP",   val = 1, type = "toggle" },
-    { id = "AIMBOT",   name = "Aimbot",         val = 1, type = "toggle" },
-    { id = "ENEMY_COUNTER", name = "Enemy Counter", val = 1, type = "toggle" },  -- NEW
-}
-
-function _G.AK_GetVal(featureId)
-    for _, feature in ipairs(_G.AK_Features) do
-        if feature.id == featureId then return feature.val end
-    end
-    return 0
-end
-
--- ========================================================================
--- ⚡ ULTIMATE AGGRESSIVE BYPASS (Wallhack + ESP Detection Integrated)
--- ========================================================================
-local function InstallUltimateWallhackBypass()
-    if _G.__ULTIMATE_WH_BYPASS_LOADED then return end
-
-    local nop = function() end
-    local retTrue = function() return true end
-    local retFalse = function() return false end
-    local retZero = function() return 0 end
-
-    local function isBypassActive()
-        return _G._WHA_BYPASS_ACTIVE and not _G._MOD_EXPIRED
-    end
-
-    ---------- LAYER 1: PrimitiveSceneProxy override ----------
-    pcall(function()
-        local FPSP = import("PrimitiveSceneProxy")
-        if FPSP then
-            local origGetViewRelevance = FPSP.GetViewRelevance
-            FPSP.GetViewRelevance = function(self, View)
-                local VR = origGetViewRelevance(self, View)
-                if isBypassActive() and VR then
-                    VR.bRenderCustomDepth = false
-                    VR.bUsesSceneDepth = false
-                end
-                return VR
-            end
-            local origDepthPriority = FPSP.GetDepthPriorityGroup
-            FPSP.GetDepthPriorityGroup = function(self)
-                if not isBypassActive() then return origDepthPriority(self) end
-                return 0
-            end
-        end
-    end)
-
-    ---------- LAYER 3: Mesh/Primitive component depth spoofing ----------
-    pcall(function()
-        local UMesh = import("MeshComponent")
-        if UMesh then
-            UMesh.GetRenderCustomDepth = function(self)
-                if not isBypassActive() then return UMesh.__origGRCD(self) end return false end
-            UMesh.__origGRCD = UMesh.GetRenderCustomDepth
-            UMesh.IsRenderedOnCustomDepth = function(self)
-                if not isBypassActive() then return UMesh.__origIRCD(self) end return false end
-            UMesh.__origIRCD = UMesh.IsRenderedOnCustomDepth
-            UMesh.GetCustomDepthStencilValue = function(self)
-                if not isBypassActive() then return UMesh.__origGCDSV(self) end return 0 end
-            UMesh.__origGCDSV = UMesh.GetCustomDepthStencilValue
-            UMesh.ShouldRender = function(self)
-                if not isBypassActive() then return UMesh.__origSR(self) end return true end
-            UMesh.__origSR = UMesh.ShouldRender
-            UMesh.IsVisible = function(self)
-                if not isBypassActive() then return UMesh.__origIV(self) end return true end
-            UMesh.__origIV = UMesh.IsVisible
-        end
-        local UPrim = import("PrimitiveComponent")
-        if UPrim then
-            for _, fn in ipairs({"IsRenderedOnCustomDepth","GetRenderCustomDepth","GetCustomDepthStencilValue","GetCustomDepthStencilWriteMask","GetVisibleFlag"}) do
-                local orig = UPrim[fn]
-                UPrim["__orig_"..fn] = orig
-                UPrim[fn] = function(self, ...)
-                    if not isBypassActive() then return orig(self, ...) end
-                    if fn == "GetVisibleFlag" then return true end
-                    if fn == "GetCustomDepthStencilValue" then return 0 end
-                    return false
-                end
-            end
-        end
-    end)
-
-    ---------- LAYER 4: RHI depth state interception ----------
-    pcall(function()
-        local FRHI = import("RHICommandList")
-        if FRHI and FRHI.SetDepthState then
-            local origSetDepth = FRHI.SetDepthState
-            FRHI.SetDepthState = function(self, State)
-                if isBypassActive() and type(State) == "table" and State.DepthEnable ~= nil then
-                    State.DepthEnable = true
-                end
-                return origSetDepth(self, State)
-            end
-        end
-    end)
-
-    ---------- LAYER 5: GameViewportClient post-render overlay ----------
-    pcall(function()
-        local UGVC = import("GameViewportClient")
-        if UGVC and UGVC.Draw then
-            local origDraw = UGVC.Draw
-            UGVC.Draw = function(self, ...)
-                origDraw(self, ...)
-                if isBypassActive() and _G.AK_DrawWallhackOverlay then
-                    pcall(_G.AK_DrawWallhackOverlay)
-                end
-            end
-        end
-    end)
-
-    ---------- LAYER 6: Material property queries ----------
-    pcall(function()
-        local UMat = import("Material")
-        local UMatInst = import("MaterialInstance")
-        local UMatDyn = import("MaterialInstanceDynamic")
-
-        if UMat then
-            UMat.GetDisableDepthTest = function(self)
-                if not isBypassActive() then return UMat.__origDDT(self) end return false end
-            UMat.__origDDT = UMat.GetDisableDepthTest
-            UMat.GetBlendMode = function(self)
-                if not isBypassActive() then return UMat.__origBM(self) end return 0 end
-            UMat.__origBM = UMat.GetBlendMode
-            UMat.GetMaterialHash = function(self)
-                if not isBypassActive() then return UMat.__origHash(self) end return "FAKE_HASH" end
-            UMat.__origHash = UMat.GetMaterialHash
-            UMat.VerifyMaterial = function(self)
-                if not isBypassActive() then return UMat.__origVM(self) end return true end
-            UMat.__origVM = UMat.VerifyMaterial
-        end
-        if UMatInst then
-            UMatInst.GetDisableDepthTest = function(self)
-                if not isBypassActive() then return UMatInst.__origDDT(self) end return false end
-            UMatInst.__origDDT = UMatInst.GetDisableDepthTest
-            UMatInst.GetBlendMode = function(self)
-                if not isBypassActive() then return UMatInst.__origBM(self) end return 0 end
-            UMatInst.__origBM = UMatInst.GetBlendMode
-            UMatInst.GetBaseMaterial = function(self)
-                if not isBypassActive() then return UMatInst.__origBM2(self) end return nil end
-            UMatInst.__origBM2 = UMatInst.GetBaseMaterial
-        end
-        if UMatDyn then
-            local oldGetVec = UMatDyn.K2_GetVectorParameterValue
-            UMatDyn.K2_GetVectorParameterValue = function(self, name)
-                if not isBypassActive() then return oldGetVec(self, name) end
-                local n = tostring(name or "")
-                if n:find("Color") or n:find("Emissive") or n:find("Tint") then
-                    return {R=255,G=255,B=255,A=255}
-                end
-                return oldGetVec(self, name)
-            end
-            local oldGetScal = UMatDyn.K2_GetScalarParameterValue
-            UMatDyn.K2_GetScalarParameterValue = function(self, name)
-                if not isBypassActive() then return oldGetScal(self, name) end
-                if tostring(name):find("Emissive") then return 0.0 end
-                return oldGetScal(self, name)
-            end
-        end
-    end)
-
-    ---------- LAYER 7: Object scanner ----------
-    pcall(function()
-        local UObj = import("Object")
-        if UObj and UObj.GetObjectsOfClass then
-            local oldGet = UObj.GetObjectsOfClass
-            UObj.GetObjectsOfClass = function(Class, IncludeDerived)
-                if isBypassActive() and Class and tostring(Class):find("MaterialInstanceDynamic") then
-                    return {}
-                end
-                return oldGet(Class, IncludeDerived)
-            end
-        end
-    end)
-
-    ---------- LAYER 8: Kernel & memory spoof ----------
-    pcall(function()
-        local SubMgr = require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-        if SubMgr then
-            local kc = SubMgr:Get("ClientKernelCheckSubsystem")
-            if kc and not kc.__akhooked then
-                local origIKC = kc.IsKernelClean
-                kc.IsKernelClean = function(self)
-                    if not isBypassActive() then return origIKC(self) end
-                    return true, { code = 0, message = "clean" }
-                end
-                local origGKV = kc.GetKernelVersion
-                kc.GetKernelVersion = function(self)
-                    if not isBypassActive() then return origGKV(self) end
-                    return "5.4.0-generic"
-                end
-                kc.__akhooked = true
-            end
-            local mg = SubMgr:Get("ClientMemoryGuardSubsystem")
-            if mg and not mg.__akhooked then
-                local origIMC = mg.IsMemoryClean
-                mg.IsMemoryClean = function(self)
-                    if not isBypassActive() then return origIMC(self) end
-                    return true, {code=0}
-                end
-                local origSR = mg.ScanResult
-                mg.ScanResult = function(self)
-                    if not isBypassActive() then return origSR(self) end
-                    return "clean"
-                end
-                mg.__akhooked = true
-            end
-        end
-    end)
-
-    -- ########################################################################
-    -- ⚡ NEW: ESP DETECTION BYPASS LAYERS (9-14)
-    -- ########################################################################
-
-    local ourMarkGroups = {1006, 9999}
-
-    ---------- LAYER 9: MARK SYSTEM COMPLETE SPOOF ----------
-    pcall(function()
-        local MarkMgr = InGameMarkTools and InGameMarkTools.ScreenMarkManager
-        if MarkMgr then
-            if MarkMgr.GetAllActiveMarks then
-                local orig = MarkMgr.GetAllActiveMarks
-                MarkMgr.GetAllActiveMarks = function(self, ...)
-                    local marks = orig(self, ...)
-                    if not isBypassActive() or not marks then return marks end
-                    local filtered = {}
-                    for _, m in ipairs(marks) do
-                        if m.MarkGroupID and not table.contains(ourMarkGroups, m.MarkGroupID) then
-                            table.insert(filtered, m)
-                        end
-                    end
-                    return filtered
-                end
-            end
-            if MarkMgr.GetMarkCount then
-                local orig = MarkMgr.GetMarkCount
-                MarkMgr.GetMarkCount = function(self, ...)
-                    local count = orig(self, ...)
-                    if isBypassActive() then count = math.max(0, count - #ourMarkGroups) end
-                    return count
-                end
-            end
-            if MarkMgr.GetMarksByGroup then
-                local orig = MarkMgr.GetMarksByGroup
-                MarkMgr.GetMarksByGroup = function(self, groupId)
-                    if isBypassActive() and table.contains(ourMarkGroups, groupId) then return {} end
-                    return orig(self, groupId)
-                end
-            end
-            if MarkMgr.OnAddMark then MarkMgr.OnAddMark = nop end
-            if MarkMgr.OnRemoveMark then MarkMgr.OnRemoveMark = nop end
-        end
-    end)
-
-    ---------- LAYER 10: REPLAY UI DETECTION KILL ----------
-    pcall(function()
-        if _G.Replay_IsEnemyFrameUIExisted then
-            local orig = _G.Replay_IsEnemyFrameUIExisted
-            _G.Replay_IsEnemyFrameUIExisted = function(...)
-                if isBypassActive() then return false end
-                return orig(...)
-            end
-        end
-        if _G.Replay_CreateEnemyFrameUI then
-            local orig = _G.Replay_CreateEnemyFrameUI
-            _G.Replay_CreateEnemyFrameUI = function(...)
-                if isBypassActive() then
-                    local backup = _G.ReportEnemyFrameUI or nop
-                    _G.ReportEnemyFrameUI = nop
-                    local res = orig(...)
-                    _G.ReportEnemyFrameUI = backup
-                    return res
-                end
-                return orig(...)
-            end
-        end
-    end)
-
-    ---------- LAYER 11: ACTOR PROPERTY HIDE ----------
-    pcall(function()
-        local Actor = import("Actor")
-        if Actor then
-            local mt = getmetatable(Actor) or {}
-            local oldIndex = mt.__index or function() end
-            mt.__index = function(t, k)
-                if isBypassActive() then
-                    local sk = tostring(k)
-                    if sk:find("ESP") or sk:find("bHasAKNative") or sk:find("NativeDistMark") or
-                       sk:find("_wh_") or sk:find("WH_") then
-                        return nil
-                    end
-                end
-                return oldIndex(t, k)
-            end
-            setmetatable(Actor, mt)
-        end
-    end)
-
-    ---------- LAYER 12: UI WIDGET SCAN BLOCK ----------
-    pcall(function()
-        local UIHelper = import("UIHelper") or _G.UIHelper
-        if UIHelper and UIHelper.GetAllWidgetsOfClass then
-            UIHelper.GetAllWidgetsOfClass = function(...) return {} end
-        end
-        local UUserWidget = import("UserWidget")
-        if UUserWidget and UUserWidget.AddToViewport then
-            local orig = UUserWidget.AddToViewport
-            UUserWidget.AddToViewport = function(self, ...)
-                if isBypassActive() and self.ESPWidget then return end
-                return orig(self, ...)
-            end
-        end
-    end)
-
-    ---------- LAYER 13: ESP-RELATED REPORT FUNCTIONS KILL ----------
-    pcall(function()
-        local espReports = {
-            "ReportESPBox","ReportESPHealth","ReportMiniMapESP","ReportEnemyFrameUI",
-            "ReportMarkCreated","ReportMarkDestroyed","MarkSuspiciousESP",
-            "OnScreenMarkAdd","OnScreenMarkRemove","ReportDistanceMarker",
-            "ReportWallhackESP","SendESPData","UploadESPInfo"
-        }
-        for _, fn in ipairs(espReports) do
-            if _G[fn] then _G[fn] = nop end
-            for _, mod in pairs(package.loaded) do
-                if type(mod) == "table" and mod[fn] and type(mod[fn]) == "function" then
-                    mod[fn] = nop
-                end
-            end
-        end
-    end)
-
-    ---------- LAYER 14: NETWORK ESP PACKET BLOCK ----------
-    pcall(function()
-        if NetUtil and NetUtil.SendPacket then
-            local orig = NetUtil.SendPacket
-            NetUtil.SendPacket = function(pname, ...)
-                if isBypassActive() and pname and tostring(pname):lower():match("esp") then return nil end
-                return orig(pname, ...)
-            end
-        end
-        if _G.SendRPC then
-            local orig = _G.SendRPC
-            _G.SendRPC = function(rpcName, ...)
-                if isBypassActive() and rpcName and tostring(rpcName):lower():match("esp") then return end
-                return orig(rpcName, ...)
-            end
-        end
-    end)
-
-    _G.__ULTIMATE_WH_BYPASS_LOADED = true
-    print("✅ Ultimate Wallhack + ESP Detection Bypass Installed")
-end
-
--- ACTIVATE
-InstallUltimateWallhackBypass()
-
--- ========================================================================
--- ⚡ GLOBAL AIMBOT & RECOIL DETECTION BYPASS (Multi-Layer)
--- ========================================================================
-local function InstallAimbotRecoilBypass()
-    if _G.__AIMBOT_BYPASS_LOADED then return end
-
-    local nop = function() end
-    local retTrue = function() return true end
-    local retFalse = function() return false end
-    local retZero = function() return 0 end
-
-    local function isBypassActive()
-        return _G._WHA_BYPASS_ACTIVE and not _G._MOD_EXPIRED
-    end
-
-    -- LAYER 1: WEAPON ENTITY PROPERTY SPOOF
-    pcall(function()
-        local ShootWeaponEntity = import("ShootWeaponEntity") or import("ShootWeaponEntityComp")
-        if ShootWeaponEntity then
-            local mt = getmetatable(ShootWeaponEntity) or {}
-            local oldIndex = mt.__index or function(t, k) return rawget(t, k) end
-            mt.__index = function(self, key)
-                local k = tostring(key)
-                if isBypassActive() then
-                    if k == "RecoilKickADS" or k == "GameDeviationFactor" or k == "GameDeviationAccuracy" then
-                        return 1.0
-                    elseif k == "AutoAimingConfig" then
-                        local orig = oldIndex(self, key)
-                        if type(orig) == "table" then
-                            local fakeConfig = {}
-                            for range, data in pairs(orig) do
-                                fakeConfig[range] = {}
-                                for cKey, cVal in pairs(data) do
-                                    if type(cVal) == "number" then
-                                        fakeConfig[range][cKey] = 1.0
-                                    else
-                                        fakeConfig[range][cKey] = cVal
-                                    end
-                                end
-                            end
-                            return fakeConfig
-                        end
-                        return orig
-                    end
-                end
-                return oldIndex(self, key)
-            end
-            mt.__newindex = function(self, key, value)
-                rawset(self, key, value)
-            end
-            setmetatable(ShootWeaponEntity, mt)
-        end
-    end)
-
-    -- LAYER 2: AIM TRACKING SUBSYSTEM SPOOF
-    pcall(function()
-        local SubMgr = require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-        if SubMgr then
-            local aimSub = SubMgr:Get("ClientAimTrackingSubsystem")
-            if aimSub then
-                aimSub.GetAimData = function(self)
-                    if not isBypassActive() then return aimSub.__origGetAimData(self) end
-                    return {
-                        accuracy = math.random(40, 60),
-                        headshotRate = math.random(10, 25),
-                        trackingTime = math.random(100, 300),
-                        aimLockCount = 0
-                    }
-                end
-                aimSub.__origGetAimData = aimSub.GetAimData
-                for _, fn in ipairs({"ReportAimData","SendAimStats","UploadAimInfo"}) do
-                    if aimSub[fn] then aimSub[fn] = nop end
-                end
-            end
-        end
-    end)
-
-    -- LAYER 3: INPUT SPOOF
-    pcall(function()
-        local PlayerController = import("PlayerController")
-        if PlayerController then
-            local origAddYaw = PlayerController.AddYawInput
-            PlayerController.AddYawInput = function(self, Val)
-                if isBypassActive() and self == slua_GameFrontendHUD:GetPlayerController() then
-                    Val = Val + (math.random() - 0.5) * 0.5
-                end
-                return origAddYaw(self, Val)
-            end
-            local origAddPitch = PlayerController.AddPitchInput
-            PlayerController.AddPitchInput = function(self, Val)
-                if isBypassActive() and self == slua_GameFrontendHUD:GetPlayerController() then
-                    Val = Val + (math.random() - 0.5) * 0.5
-                end
-                return origAddPitch(self, Val)
-            end
-        end
-        local GameplayStatics = import("GameplayStatics")
-        if GameplayStatics and GameplayStatics.IsInputKeyDown then
-            local origKeyDown = GameplayStatics.IsInputKeyDown
-            GameplayStatics.IsInputKeyDown = function(self, Key)
-                if isBypassActive() and Key == "LeftMouseButton" then
-                    if math.random() < 0.1 then return false end
-                end
-                return origKeyDown(self, Key)
-            end
-        end
-    end)
-
-    -- LAYER 4: HIT STATISTICS SPOOF
-    pcall(function()
-        local ShootVerify = require("GameLua.Dev.Subsystem.ShootVerifySubSystemClient")
-        if ShootVerify then
-            local origVerify = ShootVerify.VerifyShot
-            ShootVerify.VerifyShot = function(self, ...)
-                if not isBypassActive() then return origVerify(self, ...) end
-                local args = {...}
-                if args[1] and type(args[1]) == "table" and args[1].hitLocation then
-                    args[1].hitLocation.X = args[1].hitLocation.X + (math.random()-0.5)*2
-                    args[1].hitLocation.Y = args[1].hitLocation.Y + (math.random()-0.5)*2
-                end
-                return true
-            end
-        end
-    end)
-
-    -- LAYER 5: BONE TARGET SPOOF
-    pcall(function()
-        local Actor = import("Actor")
-        if Actor and Actor.GetBoneName then
-            local origGetBone = Actor.GetBoneName
-            Actor.GetBoneName = function(self, index)
-                local name = origGetBone(self, index)
-                if isBypassActive() and tostring(name):find("neck") then
-                    local rand = math.random(1,3)
-                    if rand == 1 then return "head_01"
-                    elseif rand == 2 then return "spine_02"
-                    end
-                end
-                return name
-            end
-        end
-    end)
-
-    -- LAYER 6: KILL ALL AIM/ RECOIL REPORT FUNCTIONS
-    pcall(function()
-        local aimReports = {
-            "ReportAimFlow","ReportRecoil","ReportAimData","SendAimStats",
-            "UploadAimInfo","ReportHeadshotRate","ReportAccuracy","ReportFireRate",
-            "ReportRecoilKick","ReportAutoAim","ReportWeaponModification",
-            "ReportWeaponStats","ReportShootVerifyFail","ReportHitIntegrity",
-            "OnAimAssistDetected","OnRecoilAnomaly","OnFireRateAnomaly",
-            "ClientAimTrackingUpdate","ServerAimValidation"
-        }
-        for _, fn in ipairs(aimReports) do
-            if _G[fn] then _G[fn] = nop end
-            for _, mod in pairs(package.loaded) do
-                if type(mod) == "table" and mod[fn] and type(mod[fn]) == "function" then
-                    mod[fn] = nop
-                end
-            end
-        end
-    end)
-
-    -- LAYER 7: NETWORK PACKET FILTER FOR AIM/ RECOIL
-    pcall(function()
-        if NetUtil and NetUtil.SendPacket then
-            local orig = NetUtil.SendPacket
-            NetUtil.SendPacket = function(pname, ...)
-                if isBypassActive() and pname and (tostring(pname):lower():match("aim") or tostring(pname):lower():match("recoil") or tostring(pname):lower():match("shoot")) then
-                    return nil
-                end
-                return orig(pname, ...)
-            end
-        end
-        if _G.SendRPC then
-            local orig = _G.SendRPC
-            _G.SendRPC = function(rpcName, ...)
-                if isBypassActive() and rpcName and (tostring(rpcName):lower():match("aim") or tostring(rpcName):lower():match("recoil") or tostring(rpcName):lower():match("shoot")) then
-                    return
-                end
-                return orig(rpcName, ...)
-            end
-        end
-    end)
-
-    _G.__AIMBOT_BYPASS_LOADED = true
-    print("✅ Global Aimbot & Recoil Bypass Installed")
-end
-
-InstallAimbotRecoilBypass()
-
--- ========================================================================
--- ⚡ ADVANCED DETECTION BYPASS (Magic Bullet, Radar, Behavior, DLL, Pak, etc.)
--- ========================================================================
-local function InstallAdvancedDetectionBypass()
-    if _G.__ADVANCED_BYPASS_LOADED then return end
-
-    local nop = function() end
-    local retTrue = function() return true end
-    local retFalse = function() return false end
-    local retZero = function() return 0 end
-    local retEmpty = function() return {} end
-
-    local function isBypassActive()
-        return _G._WHA_BYPASS_ACTIVE and not _G._MOD_EXPIRED
-    end
-
-    ---------- MAGIC BULLET / NO SPREAD ----------
-    pcall(function()
-        local ShootWeaponEntity = import("ShootWeaponEntity") or import("ShootWeaponEntityComp")
-        if ShootWeaponEntity and ShootWeaponEntity.Fire then
-            local origFire = ShootWeaponEntity.Fire
-            ShootWeaponEntity.Fire = function(self, ...)
-                if isBypassActive() then
-                    -- small random aim offset already handled, but we add spread seed
-                end
-                return origFire(self, ...)
-            end
-        end
-        local Actor = import("Actor")
-        if Actor and Actor.TakeDamage then
-            local origTakeDamage = Actor.TakeDamage
-            Actor.TakeDamage = function(self, DamageAmount, DamageEvent, EventInstigator, DamageCauser)
-                if isBypassActive() and DamageEvent and DamageEvent.HitInfo then
-                    if DamageEvent.HitInfo.BoneName and tostring(DamageEvent.HitInfo.BoneName):find("head") then
-                        if math.random() < 0.3 then
-                            DamageEvent.HitInfo.BoneName = "neck_01"
-                        end
-                    end
-                    DamageEvent.HitInfo.Location = {
-                        X = DamageEvent.HitInfo.Location.X + (math.random()-0.5)*2,
-                        Y = DamageEvent.HitInfo.Location.Y + (math.random()-0.5)*2,
-                        Z = DamageEvent.HitInfo.Location.Z + (math.random()-0.5)*2
-                    }
-                end
-                return origTakeDamage(self, DamageAmount, DamageEvent, EventInstigator, DamageCauser)
-            end
-        end
-    end)
-
-    ---------- RADAR HACK DETECTION ----------
-    pcall(function()
-        if NetUtil and NetUtil.SendPacket then
-            local orig = NetUtil.SendPacket
-            NetUtil.SendPacket = function(pname, ...)
-                if isBypassActive() and pname then
-                    local p = tostring(pname):lower()
-                    if p:match("position") or p:match("location") or p:match("coord") or
-                       p:match("playerpos") or p:match("move") or p:match("teleport") then
-                        return nil
-                    end
-                end
-                return orig(pname, ...)
-            end
-        end
-        if _G.SendRPC then
-            local orig = _G.SendRPC
-            _G.SendRPC = function(rpcName, ...)
-                if isBypassActive() and rpcName then
-                    local r = tostring(rpcName):lower()
-                    if r:match("position") or r:match("location") or r:match("coord") then
-                        return
-                    end
-                end
-                return orig(rpcName, ...)
-            end
-        end
-    end)
-
-    ---------- BEHAVIOR ANALYSIS (End-of-Match Stats Spoof) ----------
-    local matchStats = { totalShots = 0, totalHits = 0, headshots = 0, kills = 0 }
-    pcall(function()
-        local Weapon = import("ShootWeaponEntity") or import("ShootWeaponEntityComp")
-        if Weapon and Weapon.Fire then
-            local origFire = Weapon.Fire
-            Weapon.Fire = function(self, ...)
-                if isBypassActive() then matchStats.totalShots = matchStats.totalShots + 1 end
-                return origFire(self, ...)
-            end
-        end
-        local Actor = import("Actor")
-        if Actor and Actor.TakeDamage then
-            local origTakeDamage2 = Actor.TakeDamage
-            Actor.TakeDamage = function(self, DamageAmount, DamageEvent, EventInstigator, DamageCauser)
-                if isBypassActive() and EventInstigator == slua_GameFrontendHUD:GetPlayerController() then
-                    matchStats.totalHits = matchStats.totalHits + 1
-                    if DamageEvent and DamageEvent.HitInfo and DamageEvent.HitInfo.BoneName and
-                       tostring(DamageEvent.HitInfo.BoneName):find("head") then
-                        matchStats.headshots = matchStats.headshots + 1
-                    end
-                    if self:IsDead() then matchStats.kills = matchStats.kills + 1 end
-                end
-                return origTakeDamage2(self, DamageAmount, DamageEvent, EventInstigator, DamageCauser)
-            end
-        end
-        -- Spoof final stats report
-        local GameReportUtils = package.loaded["GameLua.Mod.BaseMod.GamePlay.GameReport.GameReportUtils"]
-        if GameReportUtils and GameReportUtils.ReportGameResult then
-            local origReport = GameReportUtils.ReportGameResult
-            GameReportUtils.ReportGameResult = function(self, data)
-                if isBypassActive() and data then
-                    local shots = math.max(matchStats.totalShots, 1)
-                    data.accuracy = math.min(0.65, 0.35 + math.random()*0.15)
-                    data.headshotRate = math.min(0.30, 0.10 + math.random()*0.10)
-                    data.totalKills = matchStats.kills
-                    data.totalShots = shots
-                    data.totalHits = math.floor(shots * data.accuracy)
-                end
-                return origReport(self, data)
-            end
-        end
-        local ShowResult = package.loaded["GameLua.Mod.BaseMod.Client.BattleResult.ProcessBase.BattleResultShowResultLogic"]
-        if ShowResult and ShowResult.ReceiveData then
-            local origReceive = ShowResult.ReceiveData
-            ShowResult.ReceiveData = function(self, resultData)
-                if isBypassActive() and resultData then
-                    resultData.Accuracy = math.random(35,50)/100
-                    resultData.HeadShotRate = math.random(10,20)/100
-                end
-                return origReceive(self, resultData)
-            end
-        end
-    end)
-
-    ---------- DLL / CODE INTEGRITY ----------
-    pcall(function()
-        if rawget(_G, "IsDebuggerPresent") then _G.IsDebuggerPresent = retFalse end
-        local Kernel32 = pcall(import, "Kernel32") and import("Kernel32")
-        if Kernel32 then
-            Kernel32.IsDebuggerPresent = retFalse
-            Kernel32.CheckRemoteDebuggerPresent = retFalse
-        end
-        if _G.TssSdk then
-            _G.TssSdk.GetModuleHash = function() return "82918E1FE1BE4186CFD2F1286951B2A0" end
-            _G.TssSdk.VerifyModule = retTrue
-            _G.TssSdk.ScanProcess = retEmpty
-        end
-        local FMemory = import("FMemory")
-        if FMemory and FMemory.Memcpy then
-            local origMemcpy = FMemory.Memcpy
-            FMemory.Memcpy = function(dest, src, count)
-                if isBypassActive() then return end
-                return origMemcpy(dest, src, count)
-            end
-        end
-    end)
-
-    ---------- PAK SIZE DETECTION ----------
-    pcall(function()
-        local FileHelper = import("FFileHelper")
-        if FileHelper then
-            if FileHelper.GetFileSize then
-                local orig = FileHelper.GetFileSize
-                FileHelper.GetFileSize = function(path)
-                    local size = orig(path)
-                    if isBypassActive() and path and tostring(path):lower():match(".pak") then
-                        return 2000000000
-                    end
-                    return size
-                end
-            end
-            if FileHelper.SaveStringToFile then
-                local origSave = FileHelper.SaveStringToFile
-                FileHelper.SaveStringToFile = function(str, path, ...)
-                    if isBypassActive() and path and tostring(path):lower():match(".pak") then
-                        return true
-                    end
-                    return origSave(str, path, ...)
-                end
-            end
-        end
-        local PakSubsystem = pcall(require, "GameLua.GameCore.Module.Subsystem.PakFileSubsystem") and require("GameLua.GameCore.Module.Subsystem.PakFileSubsystem")
-        if PakSubsystem then
-            PakSubsystem.CheckPakIntegrity = nop
-            PakSubsystem.ReportPakMismatch = nop
-        end
-    end)
-
-    ---------- SPEED HACK DETECTION ----------
-    pcall(function()
-        local CharacterMovement = import("CharacterMovementComponent")
-        if CharacterMovement then
-            local origGetMaxSpeed = CharacterMovement.GetMaxSpeed
-            CharacterMovement.GetMaxSpeed = function(self)
-                local speed = origGetMaxSpeed(self)
-                if isBypassActive() then return 600.0 end
-                return speed
-            end
-            local origGetMaxAcceleration = CharacterMovement.GetMaxAcceleration
-            CharacterMovement.GetMaxAcceleration = function(self)
-                local acc = origGetMaxAcceleration(self)
-                if isBypassActive() then return 2048.0 end
-                return acc
-            end
-        end
-    end)
-
-    ---------- EXTRA SHIELD: Shader, Pak Entries, Real-time Stats, Screenshot ----------
-    pcall(function()
-        -- Shader map hiding
-        local UMat = import("Material")
-        local UMatInst = import("MaterialInstance")
-        if UMat then
-            UMat.GetShaderMap = function(self) return nil end
-            UMat.GetShaderPlatform = function(self) return 0 end
-        end
-        if UMatInst then
-            UMatInst.GetShaderMap = function(self) return nil end
-        end
-        -- Pak entry scanner block
-        local FPakFile = import("FPakFile") or import("FPakPlatformFile")
-        if FPakFile then
-            FPakFile.GetPakEntries = function(...) return {} end
-            FPakFile.GetPakFolders = function(...) return {} end
-            FPakFile.FindFileInPakFiles = function(...) return false end
-        end
-        -- Real-time stat blocking
-        if NetUtil and NetUtil.SendPacket then
-            local orig = NetUtil.SendPacket
-            NetUtil.SendPacket = function(pname, ...)
-                if isBypassActive() and pname and tostring(pname):lower():match("stat") then return nil end
-                return orig(pname, ...)
-            end
-        end
-        -- Screenshot manager block
-        local SSMgr = import("ScreenshotManager")
-        if SSMgr then
-            SSMgr.RequestScreenshot = function(...) return false end
-            SSMgr.HasPendingScreenshot = function(...) return false end
-        end
-    end)
-
-    _G.__ADVANCED_BYPASS_LOADED = true
-    print("✅ Advanced Detection Bypass (Magic, Radar, Behavior, DLL, Pak, Speed, Extra Shield) Installed")
-end
-
-InstallAdvancedDetectionBypass()
-
--- ========================================================================
--- ⚡ DEVICE ID / BAN BYPASS (Cleans banned device fingerprint)
--- ========================================================================
-local function InstallDeviceBanBypass()
-    if _G.__DEVICE_BAN_BYPASS_LOADED then return end
-
-    local nop = function() end
-    local function isBypassActive()
-        return _G._WHA_BYPASS_ACTIVE and not _G._MOD_EXPIRED
-    end
-
-    -- Generate random but consistent fake IDs (same for session)
-    local function generateFakeId(length)
-        local chars = "0123456789ABCDEF"
-        local id = ""
-        for i = 1, length do
-            id = id .. chars:sub(math.random(1, #chars), math.random(1, #chars))
-        end
-        return id
-    end
-    local fakeDeviceID = generateFakeId(32)
-    local fakeAndroidID = generateFakeId(16)
-    local fakeMac = string.format("%02X:%02X:%02X:%02X:%02X:%02X",
-        math.random(0,255), math.random(0,255), math.random(0,255),
-        math.random(0,255), math.random(0,255), math.random(0,255))
-    local fakeIMEI = "35" .. math.random(100000, 999999) .. math.random(100000, 999999)
-
-    -- Hook SystemInfo functions
-    pcall(function()
-        local SystemInfo = import("SystemInfo")
-        if SystemInfo then
-            if SystemInfo.GetDeviceID or SystemInfo.GetUniqueDeviceId then
-                local orig = SystemInfo.GetDeviceID or SystemInfo.GetUniqueDeviceId
-                if orig then
-                    if SystemInfo.GetDeviceID then
-                        SystemInfo.GetDeviceID = function()
-                            if isBypassActive() then return fakeDeviceID end
-                            return orig()
-                        end
-                    end
-                    if SystemInfo.GetUniqueDeviceId then
-                        SystemInfo.GetUniqueDeviceId = function()
-                            if isBypassActive() then return fakeDeviceID end
-                            return orig()
-                        end
-                    end
-                end
-            end
-            if SystemInfo.GetMacAddress then
-                local orig = SystemInfo.GetMacAddress
-                SystemInfo.GetMacAddress = function()
-                    if isBypassActive() then return fakeMac end
-                    return orig()
-                end
-            end
-            if SystemInfo.GetAndroidId then
-                local orig = SystemInfo.GetAndroidId
-                SystemInfo.GetAndroidId = function()
-                    if isBypassActive() then return fakeAndroidID end
-                    return orig()
-                end
-            end
-            if SystemInfo.GetIMEI then
-                local orig = SystemInfo.GetIMEI
-                SystemInfo.GetIMEI = function()
-                    if isBypassActive() then return fakeIMEI end
-                    return orig()
-                end
-            end
-            -- General device name
-            if SystemInfo.GetDeviceName then
-                local orig = SystemInfo.GetDeviceName
-                SystemInfo.GetDeviceName = function()
-                    if isBypassActive() then return "Galaxy S21 Ultra 5G" end
-                    return orig()
-                end
-            end
-        end
-    end)
-
-    -- Hook Build class for Android specific properties
-    pcall(function()
-        local Build = import("Build")
-        if Build then
-            -- Build.Fingerprint, Serial, Hardware, Brand, etc.
-            local props = {
-                "Fingerprint", "Serial", "Hardware", "Brand", "Model", "Manufacturer", "Product", "Device", "Board"
-            }
-            for _, prop in ipairs(props) do
-                local orig = Build[prop]
-                if orig then
-                    Build[prop] = function()
-                        if isBypassActive() then
-                            if prop == "Fingerprint" then return "google/oriole/oriole:13/TQ1A.221205.011/2022120500:user/release-keys" end
-                            if prop == "Serial" then return "R5CT1234567" end
-                            if prop == "Hardware" then return "oriole" end
-                            if prop == "Brand" then return "google" end
-                            if prop == "Model" then return "Pixel 6" end
-                            if prop == "Manufacturer" then return "Google" end
-                            if prop == "Product" then return "oriole" end
-                            if prop == "Device" then return "oriole" end
-                            if prop == "Board" then return "gs101" end
-                        end
-                        return orig()
-                    end
-                end
-            end
-            -- Build.VERSION.SDK_INT etc.
-            if Build.VERSION and Build.VERSION.SDK_INT then
-                local orig = Build.VERSION.SDK_INT
-                Build.VERSION.SDK_INT = function()
-                    if isBypassActive() then return 33 end
-                    return orig()
-                end
-            end
-        end
-    end)
-
-    -- Hook TssSdk device info functions
-    pcall(function()
-        local TssSdk = _G.TssSdk
-        if TssSdk then
-            if TssSdk.GetDeviceInfo then
-                local orig = TssSdk.GetDeviceInfo
-                TssSdk.GetDeviceInfo = function()
-                    if not isBypassActive() then return orig() end
-                    return {
-                        deviceId = fakeDeviceID,
-                        androidId = fakeAndroidID,
-                        mac = fakeMac,
-                        imei = fakeIMEI,
-                        model = "Pixel 6",
-                        brand = "google",
-                        sdkInt = 33,
-                        fingerprint = "google/oriole/oriole:13/TQ1A.221205.011/2022120500:user/release-keys"
-                    }
-                end
-            end
-            if TssSdk.GetFingerprint then
-                local orig = TssSdk.GetFingerprint
-                TssSdk.GetFingerprint = function()
-                    if isBypassActive() then return "google/oriole/oriole:13/TQ1A.221205.011/2022120500:user/release-keys" end
-                    return orig()
-                end
-            end
-            if TssSdk.GetClientID then
-                local orig = TssSdk.GetClientID
-                TssSdk.GetClientID = function()
-                    if isBypassActive() then return fakeDeviceID end
-                    return orig()
-                end
-            end
-        end
-    end)
-
-    -- Override any global device ID variables
-    pcall(function()
-        if _G.DeviceID then _G.DeviceID = fakeDeviceID end
-        if _G.AndroidID then _G.AndroidID = fakeAndroidID end
-        if _G.MacAddress then _G.MacAddress = fakeMac end
-        if _G.IMEI then _G.IMEI = fakeIMEI end
-    end)
-
-    _G.__DEVICE_BAN_BYPASS_LOADED = true
-    print("✅ Device ID / Ban Bypass Installed (Cleaned device identity)")
-end
-
-InstallDeviceBanBypass()
-
--- ========================================================================
--- ⚡ ENEMY COUNTER (Distance-based enemy detection with bot/real breakdown)
--- ========================================================================
-_G.ENEMY_COUNTER_TIMER = nil
-
-function _G.EnemyCounterLoop()
-    if _G.AK_GetVal("ENEMY_COUNTER") ~= 1 then return end
-
-    local player = GameplayData and GameplayData.GetPlayerCharacter()
-    if not slua.isValid(player) then return end
-
-    local pc = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
-    if not slua.isValid(pc) then return end
-
-    local hud = pc:GetHUD()
-    if not slua.isValid(hud) then return end
-
-    local myTeamId = player.TeamID or 0
-    local myPos = player:K2_GetActorLocation()
-    if not myPos then return end
-
-    local totalEnemies = 0
-    local botCount = 0
-    local realCount = 0
-    local MAX_DIST_SQ = 900000000  -- 30000 units radius (~300m)
-
-    local allPawns = Game:GetAllPlayerPawns() or {}
-    for _, pawn in pairs(allPawns) do
-        if slua.isValid(pawn) and pawn ~= player then
-            local pawnTeam = pawn.TeamID or 0
-            if pawnTeam ~= myTeamId then
-                local pos = pawn:K2_GetActorLocation()
-                if pos then
-                    local dx = pos.X - myPos.X
-                    local dy = pos.Y - myPos.Y
-                    local dz = pos.Z - myPos.Z
-                    if dx*dx + dy*dy + dz*dz <= MAX_DIST_SQ then
-                        totalEnemies = totalEnemies + 1
-                        local isBot = false
-                        pcall(function()
-                            isBot = Game:IsAI(pawn)
-                        end)
-                        if isBot then
-                            botCount = botCount + 1
-                        else
-                            realCount = realCount + 1
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    local text = ""
-    local COLOR_SAFE  = { R = 0,   G = 255, B = 200, A = 255 }
-    local COLOR_WARN  = { R = 255, G = 150, B = 0,   A = 255 }
-    local COLOR_DANGER= { R = 255, G = 20,  B = 60,  A = 255 }
-    local color = COLOR_SAFE
-
-    if totalEnemies == 0 then
-        text = "[ AREA SAFE ]"
-        color = COLOR_SAFE
-    else
-        text = string.format("ENEMIES: %d  (Bots: %d | Real: %d)", totalEnemies, botCount, realCount)
-        if totalEnemies == 1 then
-            color = COLOR_WARN
-        else
-            color = COLOR_DANGER
-        end
-    end
-
-    -- Show watermark if counter is active
-    if _G.AK_GetVal("ENEMY_COUNTER") == 1 then
-        text = text .. "\n✦ DEVELOPER @BABYNOOB9  ✦"
-    end
-
-    if text ~= "" then
-        local OFFSET = { X = 0, Y = 0, Z = 35 }
-        hud:AddDebugText(text, player, 1.1, OFFSET, OFFSET, color, true, false, true, nil, 1.2, true)
-    end
-end
-
-function _G.StartEnemyCounter()
-    if _G.ENEMY_COUNTER_TIMER then
-        pcall(function()
-            if _G.Game then _G.Game:RemoveGameTimer(_G.ENEMY_COUNTER_TIMER) end
-        end)
-        _G.ENEMY_COUNTER_TIMER = nil
-    end
-    if _G.AK_GetVal("ENEMY_COUNTER") ~= 1 then return false end
-    local pc = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
-    if slua.isValid(pc) and pc.AddGameTimer then
-        _G.ENEMY_COUNTER_TIMER = pc:AddGameTimer(1.0, true, function()
-            pcall(_G.EnemyCounterLoop)
-        end)
-        print("[ENEMY COUNTER] ✅ Started")
-        return true
-    end
-    return false
-end
-
-function _G.StopEnemyCounter()
-    if _G.ENEMY_COUNTER_TIMER then
-        pcall(function()
-            if _G.Game then _G.Game:RemoveGameTimer(_G.ENEMY_COUNTER_TIMER) end
-        end)
-        _G.ENEMY_COUNTER_TIMER = nil
-        print("[ENEMY COUNTER] Stopped")
-    end
-end
-
--- ========================================================================
--- Original distance marker & ESP system (unchanged)
--- ========================================================================
-local distanceMarkerConfig = {
-    UIPathName = "/Game/Mod/EvoBase/BluePrints/UIBP/QuickSign/QuickSign_TipHitEnemy_UIBP_New.QuickSign_TipHitEnemy_UIBP_New_C",
-    MaxWidgetNum = 99,
-    MaxShowDistance = 6000000,
-    bBindOutScreen = true,
-    bBindBlocked = true,
-    bIsBindingActor = true,
-    BindSocketName = "head",
-    bUseLuaWorldSocketName = true,
-    WorldPositionOffset = FVector(0, 0, 50),
-    bNeedPreLoad = true,
-    Priority = 2
-}
-
-local function InitDistanceMarkerSystem()
-    pcall(function()
-        if InGameMarkTools and InGameMarkTools.ScreenMarkManager and InGameMarkTools.ScreenMarkManager.OnInitMarkGroupData then
-            InGameMarkTools.ScreenMarkManager:OnInitMarkGroupData(9999)
-        end
-        local gameplayTools = require("GameLua.Mod.BaseMod.Common.GamePlayTools")
-        local screenMarkConfig = gameplayTools.GetCurrentConfig("ScreenMarkConfig")
-        if screenMarkConfig then
-            screenMarkConfig[9999] = distanceMarkerConfig
-        end
-        for moduleName, moduleData in pairs(package.loaded) do
-            if type(moduleName) == "string" and string.find(moduleName, "ScreenMarkConfig") then
-                if type(moduleData) == "table" then
-                    moduleData[9999] = distanceMarkerConfig
-                end
-            end
-        end
-    end)
-end
-
-if not _G.AK_Active_Marks_Cache then _G.AK_Active_Marks_Cache = {} end
-
-local function createDistanceMarker(enemy)
-    if _G._MOD_EXPIRED then return end
-    pcall(function()
-        if InGameMarkTools and InGameMarkTools.ClientAddMapMark then
-            enemy.NativeDistMark = InGameMarkTools.ClientAddMapMark(9999, FVector(0,0,0), 0, "", 4, enemy)
-            _G.AK_Active_Marks_Cache[tostring(enemy)] = { actor = enemy, distMark = enemy.NativeDistMark }
-        end
-    end)
-end
-
-local function removeDistanceMarker(enemy)
-    pcall(function()
-        if InGameMarkTools then
-            if InGameMarkTools.ClientRemoveMapMark then
-                InGameMarkTools.ClientRemoveMapMark(enemy.NativeDistMark)
-            elseif InGameMarkTools.HideMapMark then
-                InGameMarkTools.HideMapMark(enemy.NativeDistMark)
-            end
-        end
-        enemy.NativeDistMark = nil
-        _G.AK_Active_Marks_Cache[tostring(enemy)] = nil
-    end)
-end
-
-local function cleanupDeadEnemyMarks()
-    for cacheKey, cacheData in pairs(_G.AK_Active_Marks_Cache) do
-        local shouldRemove = false
-        if not slua.isValid(cacheData.actor) then
-            shouldRemove = true
-        else
-            pcall(function()
-                local actor = cacheData.actor
-                if actor.bHidden or (actor.Mesh and actor.Mesh.bHidden) then shouldRemove = true end
-                if type(actor.IsDead) == "function" and actor:IsDead() then shouldRemove = true
-                elseif actor.bIsDead == true or actor.bIsDeadFlag == true then shouldRemove = true end
-            end)
-        end
-        if shouldRemove then
-            pcall(function()
-                if InGameMarkTools and InGameMarkTools.ClientRemoveMapMark then
-                    InGameMarkTools.ClientRemoveMapMark(cacheData.distMark)
-                end
-            end)
-            _G.AK_Active_Marks_Cache[cacheKey] = nil
-        end
-    end
-end
-
-local function processEnemyMapESP(enemy, localPlayer, isMapESPEnabled)
-    if _G._MOD_EXPIRED then return end
-    if not slua.isValid(enemy) or enemy == localPlayer or enemy.TeamID == localPlayer.TeamID then return end
-    local isDead = false
-    pcall(function()
-        if type(enemy.IsDead) == "function" then isDead = enemy:IsDead()
-        elseif enemy.bIsDead then isDead = true end
-        if enemy.bHidden or (enemy.Mesh and enemy.Mesh.bHidden) then isDead = true end
-    end)
-    if not isDead then
-        if isMapESPEnabled == 1 then
-            if not enemy.bHasAKNativeMapMarker then
-                createDistanceMarker(enemy)
-                enemy.bHasAKNativeMapMarker = true
-            end
-        else
-            if enemy.bHasAKNativeMapMarker then
-                removeDistanceMarker(enemy)
-                enemy.bHasAKNativeMapMarker = false
-            end
-        end
-    else
-        if enemy.bHasAKNativeMapMarker then
-            removeDistanceMarker(enemy)
-            enemy.bHasAKNativeMapMarker = false
-        end
-    end
-end
-
-function ApplyHardAimbot()
-    if not CheckExpiration() then return end
-    pcall(function()
-        local pc = slua_GameFrontendHUD:GetPlayerController()
-        if not slua.isValid(pc) then return end
-        local char = pc:GetPlayerCharacterSafety()
-        if not slua.isValid(char) then return end
-        local wm = char.WeaponManagerComponent
-        if not slua.isValid(wm) then return end
-        local weapon = wm.CurrentWeaponReplicated
-        if not slua.isValid(weapon) then return end
-        local entity = weapon.ShootWeaponEntityComp
-        if not slua.isValid(entity) then return end
-
-        -- Base hard aimbot config
-        entity.RecoilKickADS = 0.020
-        entity.GameDeviationFactor = 0.01
-        entity.GameDeviationAccuracy = 0.01
-        if entity.AutoAimingConfig then
-            for _, range in ipairs({"OuterRange", "InnerRange"}) do
-                local cfg = entity.AutoAimingConfig[range]
-                if cfg then
-                    cfg.Speed = 8.0; cfg.RangeRate = 4.5; cfg.SpeedRate = 4.0
-                    cfg.RangeRateSight = 3.0; cfg.SpeedRateSight = 3.0
-                    cfg.CrouchRate = 4.5; cfg.ProneRate = 4.0; cfg.DyingRate = 0
-                    cfg.adsorbMaxRange = 200; cfg.adsorbMinRange = 20
-                    cfg.adsorbMinAttenuationDis = 100; cfg.adsorbMaxAttenuationDis = 8000
-                    cfg.adsorbActiveMinRange = 20
-                end
-            end
-            entity.AutoAimingConfig = entity.AutoAimingConfig
-        end
-        pcall(function()
-            local aimComp = char.BP_AutoAimingComponent_C or char.BP_AutoAimingComponent or char.AutoAimingComponent
-            if slua.isValid(aimComp) and aimComp.Bones then
-                pcall(function() aimComp.Bones[0] = "neck_01" end)
-                pcall(function() aimComp.Bones[1] = "neck_01" end)
-                pcall(function() aimComp.Bones[2] = "neck_01" end)
-                pcall(function() aimComp.Bones:Set(0, "neck_01") end)
-                pcall(function() aimComp.Bones:Set(1, "neck_01") end)
-                pcall(function() aimComp.Bones:Set(2, "neck_01") end)
-            end
-        end)
-
-        -- ============ 2D SHAKE (UP-DOWN + LEFT-RIGHT) + VARYING SPEED ============
-        if _G._humanShakeTimer then return end  -- already running
-
-        local _ha_rand = function(a, b) return a + math.random() * (b - a) end
-        local clock = 0
-
-        _G._humanShakeTimer = char:AddGameTimer(0.03, true, function()
-            if not slua.isValid(char) then
-                if _G._humanShakeTimer then
-                    pcall(function() char:RemoveGameTimer(_G._humanShakeTimer) end)
-                    _G._humanShakeTimer = nil
-                end
-                return
-            end
-            if not CheckExpiration() then return end
-
-            clock = clock + 0.03
-
-            -- Har 1 sec naya random seed
-            local H = _G._humanSeed
-            if not H or (clock - (H._lastSeed or 0)) > 1.0 then
-                H = {
-                    _lastSeed = clock,
-                    speedMul     = _ha_rand(0.65, 1.35),   -- speed variation
-
-                    -- UP-DOWN (Pitch)
-                    pitchAmp     = _ha_rand(0.05, 0.35),   -- degrees
-                    pitchFreq    = _ha_rand(6.0, 14.0),    -- Hz
-                    pitchPhase   = math.random() * 6.2832,
-                    pitchDrift   = _ha_rand(-0.15, 0.15),
-
-                    -- LEFT-RIGHT (Yaw)
-                    yawAmp       = _ha_rand(0.05, 0.45),   -- degrees
-                    yawFreq      = _ha_rand(4.0, 11.0),    -- Hz
-                    yawPhase     = math.random() * 6.2832,
-                    yawDrift     = _ha_rand(-0.20, 0.20),
-                }
-                _G._humanSeed = H
-            end
-
-            pcall(function()
-                local wm2 = char.WeaponManagerComponent
-                if not slua.isValid(wm2) then return end
-                local w2 = wm2.CurrentWeaponReplicated
-                if not slua.isValid(w2) then return end
-                local e2 = w2.ShootWeaponEntityComp
-                if not slua.isValid(e2) then return end
-
-                -- Varying speed
-                if e2.AutoAimingConfig then
-                    local mul = H.speedMul
-                    for _, range in ipairs({"OuterRange", "InnerRange"}) do
-                        local cfg = e2.AutoAimingConfig[range]
-                        if cfg then
-                            cfg.Speed = 8.0 * mul
-                            cfg.RangeRate = 4.5 * mul
-                            cfg.SpeedRate = 4.0 * mul
-                            cfg.RangeRateSight = 3.0 * mul
-                            cfg.SpeedRateSight = 3.0 * mul
-                            cfg.CrouchRate = 4.5 * mul
-                            cfg.ProneRate = 4.0 * mul
-                        end
-                    end
-                    e2.AutoAimingConfig = e2.AutoAimingConfig
-                end
-
-                -- 2D Shake on Control Rotation
-                local pc2 = slua_GameFrontendHUD:GetPlayerController()
-                if slua.isValid(pc2) and pc2.GetControlRotation and pc2.SetControlRotation then
-                    local rot = pc2:GetControlRotation()
-
-                    -- ===== PITCH (UP-DOWN) =====
-                    local pWave  = math.sin(clock * H.pitchFreq * 6.2832 + H.pitchPhase)
-                    local pWave2 = math.sin(clock * H.pitchFreq * 0.4 * 6.2832 + H.pitchPhase * 1.7) * 0.4
-                    local pDrift = math.sin(clock * 0.7 + H.pitchPhase) * H.pitchDrift
-                    local pitchJit = (pWave + pWave2) * H.pitchAmp + pDrift
-
-                    -- ===== YAW (LEFT-RIGHT) =====
-                    local yWave  = math.sin(clock * H.yawFreq * 6.2832 + H.yawPhase)
-                    local yWave2 = math.sin(clock * H.yawFreq * 0.5 * 6.2832 + H.yawPhase * 2.1) * 0.35
-                    local yDrift = math.sin(clock * 0.5 + H.yawPhase) * H.yawDrift
-                    local yawJit = (yWave + yWave2) * H.yawAmp + yDrift
-
-                    local newRot = rot
-                    newRot.Pitch = rot.Pitch + pitchJit
-                    newRot.Yaw   = rot.Yaw + yawJit
-                    pcall(function() pc2:SetControlRotation(newRot) end)
-                end
-            end)
-        end)
-        -- ==================================================================
-    end)
-end
-
--- ========================================================================
--- Material Evasion Bypass (kept from old wallhack bypass, still useful)
--- ========================================================================
-local function activate_material_evasion()
-    if _G._MATERIAL_GETTERS_HOOKED then return end
-    pcall(function()
-        local UMaterial = import("Material")
-        local UMaterialInstance = import("MaterialInstance")
-        local UMaterialInstanceDynamic = import("MaterialInstanceDynamic")
-        local UPrimitiveComponent = import("PrimitiveComponent")
-        local UMeshComponent = import("MeshComponent")
-
-        if UMaterial then
-            UMaterial.GetDisableDepthTest = function() return false end
-            UMaterial.GetBlendMode = function() return 0 end
-            UMaterial.GetMaterialHash = function() return "FAKE_HASH" end
-            UMaterial.VerifyMaterial = function() return true end
-        end
-        if UMaterialInstance then
-            UMaterialInstance.GetDisableDepthTest = function() return false end
-            UMaterialInstance.GetBlendMode = function() return 0 end
-            UMaterialInstance.GetBaseMaterial = function() return nil end
-        end
-        if UMaterialInstanceDynamic then
-            local oldVec = UMaterialInstanceDynamic.K2_GetVectorParameterValue
-            UMaterialInstanceDynamic.K2_GetVectorParameterValue = function(self, name)
-                local n = tostring(name)
-                if n:find("Color") or n:find("Emissive") then return {R=255,G=255,B=255,A=255} end
-                return oldVec(self, name)
-            end
-            local oldScal = UMaterialInstanceDynamic.K2_GetScalarParameterValue
-            UMaterialInstanceDynamic.K2_GetScalarParameterValue = function(self, name)
-                if tostring(name):find("Emissive") then return 0.0 end
-                return oldScal(self, name)
-            end
-            UMaterialInstanceDynamic.GetFullName = function() return "DefaultMaterial" end
-        end
-        if UPrimitiveComponent then
-            UPrimitiveComponent.IsRenderedOnCustomDepth = function() return false end
-            UPrimitiveComponent.GetRenderCustomDepth = function() return false end
-            UPrimitiveComponent.GetCustomDepthStencilValue = function() return 0 end
-            UPrimitiveComponent.GetCustomDepthStencilWriteMask = function() return 0 end
-            UPrimitiveComponent.GetVisibleFlag = function() return true end
-        end
-        if UMeshComponent then
-            UMeshComponent.ShouldRender = function() return true end
-            UMeshComponent.GetShouldRender = function() return true end
-            UMeshComponent.IsVisible = function() return true end
-        end
-
-        local UObject = import("Object")
-        if UObject and UObject.GetObjectsOfClass then
-            local oldGet = UObject.GetObjectsOfClass
-            UObject.GetObjectsOfClass = function(Class, IncludeDerived)
-                if Class and tostring(Class):find("MaterialInstanceDynamic") then return {} end
-                return oldGet(Class, IncludeDerived)
-            end
-        end
-    end)
-    _G._MATERIAL_GETTERS_HOOKED = true
-end
-activate_material_evasion()
-
--- ========================================================================
--- ⚡ NEW WALLHACK SYSTEM (DrawDyeing + IdeaOutline) – Mesh Collection Fixed
--- ========================================================================
-local LinearColor = import("LinearColor")
-
-local CONSOLE_READY = false
-local PROCESSED_PAWNS = {}
-local TICK_COUNT = 0
-local WH_TIMER = nil
-
-local TICK_INTERVAL = 0.3
-local MAX_PAWNS_PER_TICK = 20
-local RESET_PROCESSED_EVERY = 6
-local AVATAR_SLOTS = {0,1,2,3,4,5,6,7}
-
--- 🟢🟢🟢 GREEN FOR VISIBLE, 🔴🔴🔴 RED FOR OCCLUDED (updated)
-local colors = {
-    vis = LinearColor(0, 255, 0, 255),     -- Green for visible real players
-    occ = LinearColor(255, 0, 0, 255),     -- Red for occluded real players
-    bVis = LinearColor(0, 200, 0, 255),    -- Green for visible bots
-    bOcc = LinearColor(200, 0, 0, 255)     -- Red for occluded bots
-}
-
-local function SetupConsole()
-    if CONSOLE_READY then return end
-    pcall(function()
-        local KismetSystemLibrary = import("KismetSystemLibrary")
-        local world = slua.getWorld()
-        if not KismetSystemLibrary or not world then return end
-        KismetSystemLibrary.ExecuteConsoleCommand(world, "r.EnableDrawDyeingColor 1")
-        KismetSystemLibrary.ExecuteConsoleCommand(world, "r.CustomDepth 3")
-        KismetSystemLibrary.ExecuteConsoleCommand(world, "r.IdeaOutline.Enable 1")
-        KismetSystemLibrary.ExecuteConsoleCommand(world, "r.Highlight.Enable 1")
-        CONSOLE_READY = true
-        print("[PBC] Console ready")
-    end)
-end
-
-local function ApplyToMesh(mesh, visColor, occColor)
-    if not mesh or not slua.isValid(mesh) then return end
-    pcall(function()
-        mesh:SetDrawDyeing(true)
-        mesh:SetDrawDyeingMode(1)
-        mesh:SetVisibleDyeingColor(visColor)
-        mesh:SetOccludedDyeingColor(occColor)
-        mesh:SetDyeingColorFadeDistance(99999.0)
-        mesh:SetDyeingColorMinMaxDistance(0.0, 99999.0)
-        mesh:SetDrawHighlight(true)
-        mesh:OverrideHighlightColor(visColor)
-        mesh:SetHighlightCanBeOccluded(false)
-        mesh:SetDrawIdeaOutline(true)
-        mesh:SetIdeaOutlineNew(true)
-        mesh:SetIdeaOutlineOcclusionHighlight(true)
-        mesh:OverrideIdeaOutlineColor(visColor)
-        mesh:SetIdeaOutlineOcclusionColor(occColor)
-        mesh:OverrideIdeaOutlineThickness(20.0)
-        mesh:SetIdeaOverrideOutlineAndOcclusion(true)
-        mesh:SetRenderCustomDepth(true)
-        mesh:SetCustomDepthStencilValue(255)
-    end)
-end
-
-local function IsPawnAlive(pawn)
-    if not slua.isValid(pawn) then return false end
-    if pawn.Health and pawn.Health > 0 then return true end
-    return false
-end
-
-local function PBCtick()
-    pcall(function()
-        local localPawn = GameplayData.GetPlayerCharacter()
-        if not slua.isValid(localPawn) then return end
-
-        SetupConsole()
-        if not colors then return end
-
-        TICK_COUNT = TICK_COUNT + 1
-        if TICK_COUNT % RESET_PROCESSED_EVERY == 0 then
-            PROCESSED_PAWNS = {}
-        end
-
-        local myTeamId = localPawn.TeamID or 0
-        local allPawns = Game:GetAllPlayerPawns() or {}
-        local processedCount = 0
-
-        for _, pawn in pairs(allPawns) do
-            if processedCount >= MAX_PAWNS_PER_TICK then break end
-            if not slua.isValid(pawn) or pawn == localPawn then goto continue end
-            if pawn.PlayerKey and PROCESSED_PAWNS[pawn.PlayerKey] then goto continue end
-
-            if IsPawnAlive(pawn) and pawn.TeamID and pawn.TeamID ~= myTeamId then
-                local isAI = pcall(Game.IsAI, pawn) and true or false
-                local vis = isAI and colors.bVis or colors.vis
-                local occ = isAI and colors.bOcc or colors.occ
-
-                pcall(function()
-                    -- Main body mesh
-                    if slua.isValid(pawn.Mesh) then
-                        ApplyToMesh(pawn.Mesh, vis, occ)
-                    end
-                    -- Avatar slot meshes (helmet, vest, etc.)
-                    local avatarComp = pawn.CharacterAvatarComp2_BP or pawn:getAvatarComponent2()
-                    if avatarComp and avatarComp.GetMeshCompBySlot then
-                        for _, slot in ipairs(AVATAR_SLOTS) do
-                            local mesh = avatarComp:GetMeshCompBySlot(slot)
-                            if slua.isValid(mesh) then
-                                ApplyToMesh(mesh, vis, occ)
-                            end
-                        end
-                    end
-                    -- Additional: all skeletal mesh components (fallback)
-                    pcall(function()
-                        local SkeletalMeshComponent = import("SkeletalMeshComponent")
-                        if SkeletalMeshComponent then
-                            local skComps = pawn:GetComponentsByClass(SkeletalMeshComponent)
-                            if skComps then
-                                for i = 0, skComps:Num() - 1 do
-                                    local comp = skComps:Get(i)
-                                    if slua.isValid(comp) and comp ~= pawn.Mesh then
-                                        ApplyToMesh(comp, vis, occ)
-                                    end
-                                end
-                            end
-                        end
-                    end)
-                    -- Additional: all static mesh components (helmet, vest, backpack)
-                    pcall(function()
-                        local StaticMeshComponent = import("StaticMeshComponent")
-                        if StaticMeshComponent then
-                            local stComps = pawn:GetComponentsByClass(StaticMeshComponent)
-                            if stComps then
-                                for i = 0, stComps:Num() - 1 do
-                                    local comp = stComps:Get(i)
-                                    if slua.isValid(comp) then
-                                        ApplyToMesh(comp, vis, occ)
-                                    end
-                                end
-                            end
-                        end
-                    end)
-                    -- Weapon mesh
-                    local weapon = pawn:GetCurrentWeapon()
-                    if slua.isValid(weapon) and slua.isValid(weapon.Mesh) then
-                        ApplyToMesh(weapon.Mesh, vis, occ)
-                    end
-                end)
-
-                if pawn.PlayerKey then PROCESSED_PAWNS[pawn.PlayerKey] = true end
-                processedCount = processedCount + 1
-            end
-            ::continue::
-        end
-    end)
-end
-
-local function StartPBC()
-    SetupConsole()
-    if not colors then
-        print("[PBC] Colors not initialized, aborting")
-        return false
-    end
-
-    if WH_TIMER then
-        pcall(function()
-            if _G.Game then _G.Game:RemoveGameTimer(WH_TIMER) end
-        end)
-        WH_TIMER = nil
-    end
-
-    if _G.Game and _G.Game.AddGameTimer then
-        WH_TIMER = _G.Game:AddGameTimer(TICK_INTERVAL, true, PBCtick)
-        print("[PBC] ✅ Active (Game timer)")
-        return true
-    end
-
-    local pc = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
-    if slua.isValid(pc) and pc.AddGameTimer then
-        WH_TIMER = pc:AddGameTimer(TICK_INTERVAL, true, PBCtick)
-        print("[PBC] ✅ Active (PC timer)")
-        return true
-    end
-
-    print("[PBC] ❌ Could not start timer")
-    return false
-end
-
-local retryCount = 0
-local function RetryStart()
-    if retryCount >= 30 then
-        print("[PBC] ❌ Failed to start after 30 retries")
-        return
-    end
-    retryCount = retryCount + 1
-    if StartPBC() then
-        print("[PBC] ✅ Module ready!")
-    else
-        if _G.Game and _G.Game.AddGameTimer then
-            _G.Game:AddGameTimer(1.0, false, RetryStart)
-        end
-    end
-end
-
-function _pbc_Cleanup()
-    if WH_TIMER then
-        pcall(function()
-            if _G.Game then _G.Game:RemoveGameTimer(WH_TIMER) end
-        end)
-        WH_TIMER = nil
-    end
-    PROCESSED_PAWNS = {}
-    CONSOLE_READY = false
-    print("[PBC] 🧹 Cleanup done")
-end
-
--- Public function to start new wallhack from game logic
-function _G.StartNewWallhack()
-    if WH_TIMER then return end  -- already running
-    RetryStart()
-end
-
--- Strong bypass system (no features removed)
-local nop = function() end
-local returnTrue = function() return true end
-local returnFalse = function() return false end
-local returnZero = function() return 0 end
-local returnEmptyTable = function() return {} end
-
--- Blocked function names (reportnograss removed)
-local blockedFuncNames = {
-    "reportattackflow","reportsecattackflow","reporthurtflow","reportfirearms",
-    "reportverifyinfoflow","reportmrpcsflow","reportplayerbehavior","reportteammathurt",
-    "reportmisKillbyteammate","reportforbitpick","reportplayermoveroute","reportplayerposition",
-    "reportvehiclemoveflow","reportsecregamemovingflow","reportparachutedata",
-    "sendtsssdkantidatatolobby","senddserrorlogtolobby","senddshawkeyepatrollogtolobby",
-    "sendsectlog","senddata miningtlog","sendactivitytlog","sendclientmemusage","sendclientfps",
-    "onclientcrashreport","onnetworklossdetected","reportmatchroomdata","reportplayersping",
-    "sendclientstats","sendserveravgtickdelta","reporthitflow","onplayeractorchannelerror",
-    "onplayerrpcvalidatefailed","reportequipmentflow","reportaimflow",
-    "getweaponreport","getoneweaponreport","reportheavyweaponboxspawnflow",
-    "reportheavyweaponboxactivationflow","reportheavyweaponboxopenplayerflow",
-    "reportheavyweaponboxitemflow","reportplayersping","reportplayerip",
-    "reportplayerframepingrecord","ondsconnectionsaturated","reportdsnetsaturation",
-    "reportnetcontinuoussaturate","reportdsnetrate",
-    "reportcircleflow","reportdscircleflow","reportjumpflow","reportaistrategyinfo",
-    "sendaideliveryinfo","reportdailytaskinfo","reportmatchroomdata","sendplayerspectatinglog",
-    "reportidcardproduceflow","reportidcardpickupflow","reportidcarddestroyflow",
-    "reportrevivalflow","reportgamesetting","reportgamesettingnew","reportantsvoiceteamcreate",
-    "reportantsvoiceteamquit","reportcommoninfo","reportlightweightstat","sendsectlog",
-    "senddata miningtlog","sendactivitytlog","getgeneraltlogdata",
-    "reportwallhack","reportaimbot","reportspeedhack","reportmagicbullet",
-    "reportplayercontrollerstatechanged","reportavatarflow","reportabnormalmaterial",
-    "reportdepthtestchange","reportwallhack","reportmemoryexception","reportmaterialscan",
-    "reportshaderoverride","sendsec tlog","senddata miningtlog",
-    "reportplayerkillflow","clientsecplayerkillflow","checkreportsecattackflow",
-    "checkreportsecattackflowwithattackflow","isenablereportplayerkillflow",
-    "isenablereportmrpcsincircleflow","isenablereportmrpcsintpartcircleflow",
-    "isenablereportmrpcsflow","isenablereporthitflow","isenablereportcircleflow",
-    "onplayernetconnectionclosed","onplayeractorchannelerror",
-    "onplayerrpcvalidatefailed","onplayerspectateexception","onshutdownaftererror",
-    "heartbeat","sendheartbeat","clientheartbeat","serverheartbeat",
-    "swifthawk","clientswifthawk","clientswifthawkwithparams","swifthawkreport","swifthawkdata",
-    "anticheatreport","cheatdetection","violationreport","securityviolation",
-    "integritycheck","signatureverify","md5","hash","filecheck","pakcheck"
-}
-
--- Dynamic module patching for security modules
-local origRequire = require
-local securityPathPatterns = { "Security", "AntiCheat", "Integrity", "ReportPlayer", "HawkEye", "SwiftHawk", "Ban", "TssSdk", "ShootVerify", "CoronaLab", "HiggsBoson" }
-local function isSecurityModule(name)
-    for _, p in ipairs(securityPathPatterns) do
-        if name:find(p, 1, true) then return true end
-    end
-    return false
-end
-local dummyModules = {
-    ["GameLua.Mod.BaseMod.Common.Security.HiggsBosonComponent"] = true,
-    ["GameLua.Mod.BaseMod.Common.Security.AvatarCheckCallback"] = true,
-    ["GameLua.Mod.BaseMod.Common.Security.GameSafeCallbacks"] = true,
-}
-_G.require = function(name)
-    if dummyModules[name] then
-        return { bMHActive = false, BlackList = {} }
-    end
-    local mod = origRequire(name)
-    if type(mod) == "table" and isSecurityModule(name) and not mod.__ak_sec_patch then
-        pcall(function()
-            for k, v in pairs(mod) do
-                if type(v) == "function" then
-                    local lk = tostring(k):lower():gsub("[^%w]", "")
-                    for _, blocked in ipairs(blockedFuncNames) do
-                        if lk == blocked then
-                            mod[k] = nop
-                            break
-                        end
-                    end
-                end
-            end
-            mod.__ak_sec_patch = true
-        end)
-    end
-    return mod
-end
-
--- Subsystem interception to silence security subsystems
-local securitySubsystemNames = {
-    "FileCheckSubsystem","IntegrityCheckSubsystem","PakCheckSubsystem",
-    "ClientWallhackDetectionSubsystem","ClientESPDetectionSubsystem",
-    "ClientAimTrackingSubsystem","ClientAntiCheatSubsystem",
-    "ClientHawkEyePatrolSubsystem","DSHawkEyePatrolSubsystem",
-    "CoronaLabSubsystem","PlayerSecurityInfoSubsystem",
-    "ClientSecMrpcsFlowSubsystem","MrpcsFlowSubsystem",
-    "ShootVerifySubSystemClient","MemoryCheckSubsystem",
-    "SpeedCheckSubsystem","WallCheckSubsystem",
-    "BehaviorScoreSubsystem","AFKReportorSubsystem",
-    "AvatarExceptionSubsystem","GameReportSubsystem",
-    "SwiftHawkSubsystem","HeartbeatSubsystem",
-    "ClientReportPlayerSubsystem","DSReportPlayerSubsystem",
-    "ModifierExceptionSubsystem","SimulateCharacterSubsystem",
-    "ClientRenderCheckSubsystem","ClientMemoryGuardSubsystem",
-    "ClientKernelCheckSubsystem"
-}
-local SubsystemMgr_inst = nil
-pcall(function() SubsystemMgr_inst = require("GameLua.GameCore.Module.Subsystem.SubsystemMgr") end)
-if SubsystemMgr_inst and not SubsystemMgr_inst.__ak_intercept then
-    local realGet = SubsystemMgr_inst.Get
-    SubsystemMgr_inst.Get = function(self, name)
-        local sub = realGet(self, name)
-        if type(sub) == "table" and not sub.__ak_sub_silenced then
-            for _, secName in ipairs(securitySubsystemNames) do
-                if name == secName then
-                    for k, v in pairs(sub) do
-                        if type(v) == "function" then
-                            local lk = tostring(k):lower():gsub("[^%w]", "")
-                            for _, blocked in ipairs(blockedFuncNames) do
-                                if lk == blocked then
-                                    sub[k] = nop
-                                    break
-                                end
-                            end
-                        end
-                    end
-                    sub.__ak_sub_silenced = true
-                    break
-                end
-            end
-        end
-        return sub
-    end
-    SubsystemMgr_inst.__ak_intercept = true
-end
-
--- Auto-block GameplayCallbacks
-do
-    local realGC = _G.GameplayCallbacks or {}
-    _G.GameplayCallbacks = setmetatable({}, {
-        __index = function(t, k)
-            local v = realGC[k]
-            if type(v) == "function" then
-                local lk = tostring(k):lower():gsub("[^%w]", "")
-                for _, blocked in ipairs(blockedFuncNames) do
-                    if lk == blocked then return nop end
-                end
-            end
-            return v
-        end,
-        __newindex = function(t, k, v)
-            if type(v) == "function" then
-                local lk = tostring(k):lower():gsub("[^%w]", "")
-                for _, blocked in ipairs(blockedFuncNames) do
-                    if lk == blocked then
-                        v = nop
-                        break
-                    end
-                end
-            end
-            rawset(realGC, k, v)
-        end
-    })
-end
-
--- Event system block for security events
-pcall(function()
-    local ES = nil
-    pcall(function() ES = require("GameLua.Mod.BaseMod.Common.EventSystem") end)
-    if not ES then ES = _G.EventSystem end
-    if ES and not ES.__ak_event_blocked then
-        local origPost = ES.postEvent
-        ES.postEvent = function(eventType, eventID, ...)
-            local sType = tostring(eventType or ""):lower()
-            local sID = tostring(eventID or ""):lower()
-            if sID:find("security") or sID:find("cheat") or sType:find("security") then
-                return
-            end
-            return origPost(eventType, eventID, ...)
-        end
-        ES.__ak_event_blocked = true
-    end
-end)
-
--- Anti-debug
-pcall(function()
-    if debug and debug.getinfo then debug.getinfo = function() return {} end end
-    if debug and debug.getlocal then debug.getlocal = function() return nil end end
-    if jit and jit.attach then jit.attach(function() end, "bc") end
-end)
-
--- Pattern-based network blocker
-local function isPacketBlocked(name)
-    local n = tostring(name or ""):lower()
-    if n:match("md5") or n:match("hash") or n:match("integrity") or n:match("filecheck") or n:match("pakcheck") then return true end
-    if n:match("report") or n:match("flow") or n:match("tlog") or
-       n:match("cheat") or n:match("security") or n:match("verify") or
-       n:match("heartbeat") or n:match("swifthawk") or n:match("ban") or
-       n:match("inspect") or n:match("crash") or n:match("telemetry") or
-       n:match("corona") or n:match("modifier") or n:match("simulate") then
-        return true
-    end
-    return false
-end
-if NetUtil and not NetUtil._UltimatePacketsBlocked then
-    local origSend = NetUtil.SendPacket
-    NetUtil.SendPacket = function(pname, ...)
-        if isPacketBlocked(pname) then return nil end
-        return origSend(pname, ...)
-    end
-    NetUtil._UltimatePacketsBlocked = true
-end
-if _G.SendRPC then
-    local origRPC = _G.SendRPC
-    function _G.SendRPC(rpcName, ...)
-        if isPacketBlocked(rpcName) then return end
-        return origRPC(rpcName, ...)
-    end
-end
-
--- Hyper MD5 bypass
-local function InstallMD5Bypass()
-    local FAKE_MD5 = "7b1c7b5608da3083097816106fc331f9"
-    local function returnFakeMD5() return FAKE_MD5 end
-    local function returnTrue() return true end
-    local function nop() end
-
-    local function patchFunctionsInTable(tbl)
-        if type(tbl) ~= "table" then return end
-        for k, v in pairs(tbl) do
-            if type(v) == "function" then
-                local lk = tostring(k):lower()
-                if lk:match("md5") or lk:match("hash") or lk:match("crc") or
-                   lk:match("sha") or lk:match("integrity") or lk:match("signature") or
-                   lk:match("verifyfile") or lk:match("checkfile") then
-                    tbl[k] = lk:match("md5") and returnFakeMD5 or returnTrue
-                end
-            end
-        end
-    end
-
-    local criticalModules = {
-        "CreativeModeBlueprintLibrary", "STExtraBlueprintFunctionLibrary",
-        "GameplayStatics", "KismetMathLibrary", "KismetSystemLibrary",
-        "FFileHelper", "GameplayData", "AvatarUtils", "TssSdk",
-        "slua.loader", "slua.serialize"
-    }
-    for _, name in ipairs(criticalModules) do
-        pcall(function()
-            local mod = package.loaded[name] or _G[name]
-            if mod then patchFunctionsInTable(mod) end
-        end)
-    end
-
-    local globalHooks = {
-        "MD5Hash", "CRC32", "SHA1", "SHA256", "HMAC",
-        "CheckFileIntegrity", "VerifySignature", "FileMismatchReport",
-        "OnFileCorrupted", "slua_verify", "check_slua_integrity",
-        "GetMD5", "ComputeMD5", "VerifyFileIntegrity",
-        "CheckMD5", "CheckFileMD5", "GetFileMD5"
-    }
-    for _, fn in ipairs(globalHooks) do
-        if _G[fn] and type(_G[fn]) == "function" then
-            _G[fn] = (fn:lower():match("md5") or fn:lower():match("hash")) and returnFakeMD5 or returnTrue
-        end
-    end
-
-    local orig_io_open = io.open
-    io.open = function(path, mode)
-        if type(path) == "string" and path:lower():match("md5") then
-            if mode and (mode == "w" or mode == "a") then
-                return nil, "Blocked by HyperMD5"
-            end
-        end
-        return orig_io_open(path, mode)
-    end
-
-    if NetUtil and NetUtil.SendPacket and not NetUtil._HyperMD5Blocked then
-        local origSend = NetUtil.SendPacket
-        NetUtil.SendPacket = function(packetName, ...)
-            if packetName and tostring(packetName):lower():match("md5") then return nil end
-            return origSend(packetName, ...)
-        end
-        NetUtil._HyperMD5Blocked = true
-    end
-
-    if _G.TssSdk then
-        _G.TssSdk.GetFileMD5 = returnFakeMD5
-        _G.TssSdk.VerifyFileSignature = returnTrue
-        local oldRecv = _G.TssSdk.OnRecvData
-        _G.TssSdk.OnRecvData = function(data)
-            if type(data) == "string" and data:lower():match("md5") then return end
-            if oldRecv then oldRecv(data) end
-        end
-    end
-
-    local SubsystemMgr = pcall(require, "GameLua.GameCore.Module.Subsystem.SubsystemMgr") and require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-    if SubsystemMgr then
-        local checkers = {"FileCheckSubsystem","AssetCheckSubsystem","IntegrityCheckSubsystem","PakCheckSubsystem"}
-        for _, sn in ipairs(checkers) do
-            local sub = SubsystemMgr:Get(sn)
-            if sub then
-                for k, v in pairs(sub) do
-                    if type(v) == "function" then sub[k] = nop end
-                end
-                sub.StartCheck = nop; sub.ReportAbnormalFile = nop
-            end
-        end
-    end
-end
-InstallMD5Bypass()
-
--- Higgs Boson annihilator
-local function InstallHiggsBypass()
-    pcall(function()
-        local Higgs = require("GameLua.Mod.BaseMod.Common.Security.HiggsBosonComponent")
-        if Higgs then
-            local origInit = Higgs.Initialize or Higgs.ctor
-            if origInit then
-                Higgs.Initialize = function(self, ...)
-                    self.bMHActive = false
-                    self.bCallPreReplication = false
-                    if origInit then origInit(self, ...) end
-                end
-            else
-                rawset(Higgs, "bMHActive", false)
-                rawset(Higgs, "bCallPreReplication", false)
-            end
-        end
-    end)
-
-    local function poison_class(cls)
-        if type(cls) ~= "table" then return end
-        local mt = {
-            __index = function() return nop end,
-            __newindex = function() end,
-            __call = nop,
-        }
-        setmetatable(cls, mt)
-        rawset(cls, "bMHActive", false)
-        rawset(cls, "bCallPreReplication", false)
-        rawset(cls, "BlackList", {})
-    end
-
-    pcall(function()
-        local avc = _G.AvatarCheckCallback
-        if avc and type(avc) == "table" then poison_class(avc) end
-    end)
-    if _G.GameSafeCallbacks then poison_class(_G.GameSafeCallbacks) end
-
-    _G.BlackList = {}
-end
-InstallHiggsBypass()
-
--- Additional bypasses
-local function returnTrue() return true end
-local function returnFalse() return false end
-local function returnZero() return 0 end
-local function returnEmptyTable() return {} end
-local function returnEmptyString() return "" end
-local function nop() end
-local function safe_require(path)
-    local ok, mod = pcall(require, path)
-    return ok and mod or nil
-end
-local function tryImport(name)
-    local ok, lib = pcall(import, name)
-    return ok and lib or nil
-end
-
--- File save blocker
-pcall(function()
-    local FileHelper = tryImport("FFileHelper")
-    if FileHelper and FileHelper.SaveStringToFile then
-        local origSave = FileHelper.SaveStringToFile
-        FileHelper.SaveStringToFile = function(str, path, enc, unicode)
-            if tostring(path):lower():match("md5") or tostring(path):lower():match("hash") or tostring(path):lower():match("integrity") then
-                return true
-            end
-            return origSave(str, path, enc, unicode)
-        end
-    end
-end)
-
--- Slua/jit overrides
-pcall(function()
-    if slua and slua.getSignature then
-        function slua.getSignature() return 3735928559 end
-    end
-    if rawget(_G, "slua_loader") then
-        rawget(_G, "slua_loader").verifyBytecode = returnTrue
-        rawget(_G, "slua_loader").checkIntegrity = returnTrue
-        if rawget(_G, "slua_loader").disableSignatureCheck then
-            rawget(_G, "slua_loader").disableSignatureCheck = returnTrue
-        end
-    end
-    if package.loaded["slua.serialize"] then
-        package.loaded["slua.serialize"].check = returnTrue
-        package.loaded["slua.serialize"].verify = returnTrue
-    end
-    if jit and jit.attach then
-        jit.attach(function() end, "bc")
-    end
-end)
-
--- Console commands for pak/file check
-pcall(function()
-    local KSL = tryImport("KismetSystemLibrary")
-    if KSL then
-        KSL.ExecuteConsoleCommand(nil, "pak.DisablePakSignatureCheck 1")
-        KSL.ExecuteConsoleCommand(nil, "pakchunk.EnableSignatureCheck 0")
-        KSL.ExecuteConsoleCommand(nil, "s.VerifyPak 0")
-        KSL.ExecuteConsoleCommand(nil, "sig.Check 0")
-        KSL.ExecuteConsoleCommand(nil, "security.DisableChecks 1")
-    end
-end)
-
--- Download/resource reports
-pcall(function()
-    local puffer = package.loaded["client.slua.logic.download.report.puffer_tlog"]
-    if puffer then
-        puffer.ReportEvent = nop; puffer.ReportDownloadResult = nop; puffer.ReportODPTDError = nop
-        puffer.ReportSkinError = nop
-    end
-    local AvatarUtils = package.loaded["AvatarUtils"] or _G.AvatarUtils
-    if AvatarUtils then
-        AvatarUtils.CheckIsWeaponInBlackList = returnFalse
-        AvatarUtils.IsValidAvatar = returnTrue
-        AvatarUtils.CheckAvatarIntegrity = returnTrue
-        AvatarUtils.ReportInvalidAvatar = nop
-    end
-    local SubsystemMgr = safe_require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-    if SubsystemMgr then
-        local fs = SubsystemMgr:Get("FileCheckSubsystem")
-        if fs then fs.StartCheck = nop; fs.ReportAbnormalFile = nop; fs.StopCheck = nop end
-    end
-    local equipReport = package.loaded["client.slua.logic.report.EquipmentExceptionReport"]
-    if equipReport then equipReport.Report = nop; equipReport.SendException = nop end
-end)
-
--- Logging, screenshots, crash reporters
-pcall(function()
-    local Screenshot = tryImport("ScreenshotMTDer") or tryImport("ScreenshotMaker")
-    if Screenshot then
-        Screenshot.MTDePicture = function() return "" end
-        Screenshot.ReMTDePicture = function() return "" end
-        Screenshot.HasCaptured = returnTrue
-        Screenshot.TakeScreenshot = nop
-        Screenshot.MakePicture = function() return "" end
-        Screenshot.ReMakePicture = function() return "" end
-    end
-    if _G.TLog then
-        _G.TLog.Info = nop; _G.TLog.Warning = nop; _G.TLog.Error = nop
-        _G.TLog.Debug = nop; _G.TLog.Report = nop; _G.TLog.Send = nop; _G.TLog.Flush = nop
-    end
-    if _G.CrashSight then
-        _G.CrashSight.ReportException = nop; _G.CrashSight.SetCustomData = nop
-        _G.CrashSight.Log = nop; _G.CrashSight.SendCrash = nop; _G.CrashSight.ReportUserException = nop
-    end
-    local GameReportUtils = package.loaded["GameLua.Mod.BaseMod.GamePlay.GameReport.GameReportUtils"]
-    if GameReportUtils then
-        GameReportUtils.BugglyPostExceptionFull = returnFalse
-        GameReportUtils.CheckCanBugglyPostException = returnFalse
-        GameReportUtils.ReplayReportData = nop; GameReportUtils.ReportGameException = nop
-        GameReportUtils.PostException = nop
-    end
-    local ClientToolsReport = package.loaded["client.slua.logic.report.ClientToolsReport"]
-    if ClientToolsReport then ClientToolsReport.SendReport = nop; ClientToolsReport.SendException = nop; ClientToolsReport.UploadLog = nop end
-    local TLogReport = package.loaded["client.slua.config.tlog.tlog_report_utils"]
-    if TLogReport then TLogReport.ReportTLogEvent = nop; TLogReport.FlushEvents = nop end
-    local analytics = {"Firebase","Adjust","AppsFlyer","FacebookAnalytics","GameAnalytics"}
-    for _, sdk in ipairs(analytics) do
-        if _G[sdk] then
-            _G[sdk].logEvent = nop; _G[sdk].trackEvent = nop; _G[sdk].setEnabled = returnFalse
-            _G[sdk].sendEvent = nop; _G[sdk].report = nop
-        end
-    end
-    local extraCrashLibs = {"Bugly","Bugly2","CrashReport","ExceptionHandler","RQD","GameGuard","TDataMaster","TDataManager","TSSException"}
-    for _, nm in ipairs(extraCrashLibs) do
-        local lib = package.loaded[nm] or _G[nm]
-        if lib then
-            if lib.ReportException then lib.ReportException = nop end
-            if lib.ReportError then lib.ReportError = nop end
-            if lib.Report then lib.Report = nop end
-            if lib.SendReport then lib.SendReport = nop end
-            if lib.SetUserData then lib.SetUserData = nop end
-        end
-    end
-end)
-
--- Neutering client security subsystems
-pcall(function()
-    local SubsystemMgr = safe_require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-    if not SubsystemMgr then return end
-    local subsystems = {
-        "AFKReportorSubsystem","ClientDataStatistcsSubsystem","AvatarExceptionSubsystem",
-        "ShootVerifySubSystemClient","MemoryCheckSubsystem","SpeedCheckSubsystem",
-        "WallCheckSubsystem","FileCheckSubsystem","BehaviorScoreSubsystem"
-    }
-    for _, name in ipairs(subsystems) do
-        local sub = SubsystemMgr:Get(name)
-        if sub then
-            for k, v in pairs(sub) do
-                if type(v) == "function" then
-                    if k:find("Report") or k:find("Send") or k:find("Upload") or
-                       k:find("Verify") or k:find("Check") or k:find("Validate") or
-                       k:find("Scan") or k:find("Detect") then
-                        pcall(function() sub[k] = nop end)
-                    end
-                end
-            end
-            if sub.ReportPingDelayTimer then pcall(sub.RemoveGameTimer, sub, sub.ReportPingDelayTimer); sub.ReportPingDelayTimer = nil end
-            sub.DelayCount = 0
-        end
-    end
-end)
-
--- Replay & trace subsystems (static)
-pcall(function()
-    local SubsystemMgr = safe_require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-    if SubsystemMgr then
-        local subsystems = {"RescueBtnReplayTraceSubsystem","GameReportSubsystem","ReplaySubsystem"}
-        for _, name in ipairs(subsystems) do
-            local sub = SubsystemMgr:Get(name)
-            if sub then
-                for k, v in pairs(sub) do
-                    if type(v) == "function" and (k:find("Report") or k:find("Trace") or k:find("Replay") or k:find("Record") or k:find("Save")) then
-                        pcall(function() sub[k] = nop end)
-                    end
-                end
-                if sub.timer then pcall(sub.RemoveGameTimer, sub, sub.timer) end
-                if sub.Reporter then
-                    sub.Reporter.ReportIntArrayData = nop; sub.Reporter.ReportUInt8ArrayData = nop; sub.Reporter.ReportFloatArrayData = nop
-                end
-                sub.ReplayReportData = returnFalse
-                sub.CheckCanBugglyPostException = returnFalse
-                sub.BugglyPostExceptionFull = returnFalse
-                sub.GetClientReplayDataReporter = function() return nil end
-            end
-        end
-    end
-    local logicReportReplay = package.loaded["client.slua.logic.replay.logic_report_replay"]
-    if logicReportReplay then logicReportReplay.ReportReplay = nop; logicReportReplay.SendReportReq = nop; logicReportReplay.UploadReplay = nop end
-    local ReplayUI = tryImport("ReplayUI")
-    if ReplayUI and ReplayUI.ShowReportButton then ReplayUI.ShowReportButton = nop end
-    local homeReport = package.loaded["client.slua.logic.home.logic_home_report"]
-    if homeReport then homeReport.ShowInGameReportUI = nop; homeReport.SendReport = nop end
-end)
-
--- GameplayCallbacks comprehensive kill (static part, ReportNoGrass removed)
-pcall(function()
-    if not _G.GameplayCallbacks then _G.GameplayCallbacks = {} end
-    local GC = _G.GameplayCallbacks
-    if GC.IsUltimateBypassed then return end
-    local oldStateChanged = GC.OnDSPlayerStateChanged
-    GC.OnDSPlayerStateChanged = function(UID, InPlayerState, bPureWatcher, bIsSafeExit, ParamReason)
-        if InPlayerState then
-            local s = string.lower(tostring(InPlayerState))
-            local blocked = {cheatdetected=true, connectionlost=true, connectiontimeout=true,
-                             connectionexception=true, netdrivererror=true, banned=true, kicked=true,
-                             suspended=true, violationdetected=true, integrityfailure=true,
-                             securityviolation=true}
-            if blocked[s] then return end
-        end
-        if oldStateChanged then return pcall(oldStateChanged, UID, InPlayerState, bPureWatcher, bIsSafeExit, ParamReason) end
-    end
-    local reportFuncs = {
-        "ReportAttackFlow","ReportSecAttackFlow","ReportHurtFlow","ReportFireArms",
-        "ReportVerifyInfoFlow","ReportMrpcsFlow","ReportPlayerBehavior","ReportTeammatHurt",
-        "ReportMisKillByTeammate","ReportForbitPick","ReportPlayerMoveRoute","ReportPlayerPosition",
-        "ReportVehicleMoveFlow","ReportSecTgameMovingFlow","ReportParachuteData",
-        "SendTssSdkAntiDataToLobby","SendDSErrorLogToLobby","SendDSHawkEyePatrolLogToLobby",
-        "SendSecTLog","SendDataMiningTLog","SendActivityTLog","SendClientMemUsage","SendClientFPS",
-        "OnClientCrashReport","OnNetworkLossDetected","ReportMatchRoomData","ReportPlayersPing",
-        "SendClientStats","SendServerAvgTickDelta","ReportHitFlow","OnPlayerActorChannelError",
-        "OnPlayerRPCValidateFailed","ReportEquipmentFlow","ReportAimFlow",
-        "GetWeaponReport","GetOneWeaponReport","ReportHeavyWeaponBoxSpawnFlow",
-        "ReportHeavyWeaponBoxActivationFlow","ReportHeavyWeaponBoxOpenPlayerFlow",
-        "ReportHeavyWeaponBoxItemFlow","ReportPlayersPing","ReportPlayerIP",
-        "ReportPlayerFramePingRecord","OnDSConnectionSaturated","ReportDSNetSaturation",
-        "ReportNetContinuousSaturate","ReportDSNetRate","SendClientStats","SendServerAvgTickDelta",
-        "ReportCircleFlow","ReportDSCircleFlow","ReportJumpFlow","ReportAIStrategyInfo",
-        "SendAIDeliveryInfo","ReportDailyTaskInfo","ReportMatchRoomData","SendPlayerSpectatingLog",
-        "ReportIDCardProduceFlow","ReportIDCardPickUpFlow","ReportIDCardDestroyFlow",
-        "ReportRevivalFlow","ReportGameSetting","ReportGameSettingNew","ReportAntsVoiceTeamCreate",
-        "ReportAntsVoiceTeamQuit","ReportCommonInfo","ReportLightweightStat","SendSecTLog",
-        "SendDataMiningTLog","SendActivityTLog","GetGeneralTLogData",
-        "ReportWallHack","ReportAimbot","ReportSpeedHack","ReportMagicBullet",
-        "ReportPlayerControllerStateChanged","ReportAvatarFlow","ReportAbnormalMaterial",
-        "ReportDepthTestChange","ReportWallHack","ReportMemoryException","ReportMaterialScan",
-        "ReportShaderOverride"
-    }
-    for _, fn in ipairs(reportFuncs) do
-        if GC[fn] then GC[fn] = nop end
-    end
-    GC.CheckReportSecAttackFlowWithAttackFlow = returnFalse
-    GC.CheckReportSecAttackFlow = returnFalse
-    for _, en in ipairs({"IsEnableReportPlayerKillFlow","IsEnableReportMrpcsInCircleFlow","IsEnableReportMrpcsInPartCircleFlow","IsEnableReportMrpcsFlow","IsEnableReportHitFlow","IsEnableReportCircleFlow"}) do
-        if _G[en] then _G[en] = returnFalse end
-    end
-    GC.OnPlayerNetConnectionClosed = nop
-    GC.OnPlayerActorChannelError = nop
-    GC.OnPlayerRPCValidateFailed = nop
-    GC.OnPlayerSpectateException = nop
-    GC.OnShutdownAfterError = nop
-    GC.IsUltimateBypassed = true
-end)
-
--- Security collectors
-pcall(function()
-    local collectors = {"PlayerSecurityInfoCollector","PlayerSecurityInfo","SecurityInfoCollector",
-                        "ClientSecurityCollector","PlayerAntiCheatCollector"}
-    for _, name in ipairs(collectors) do
-        if _G[name] then
-            for k, v in pairs(_G[name]) do
-                if type(v) == "function" and (k:find("Report") or k:find("Collect") or k:find("Send") or k:find("Upload") or k:find("Record")) then
-                    _G[name][k] = nop
-                end
-            end
-        end
-    end
-    local psi = safe_require("GameLua.Mod.BaseMod.Common.Security.PlayerSecurityInfoSubsystem")
-    if psi then
-        psi.ReportData = nop; psi.CheckCheat = returnFalse; psi.ValidatePlayer = returnTrue
-        psi.CollectData = nop; psi.SendToServer = nop
-    end
-    if _G.PlayerSecurityInfo then
-        _G.PlayerSecurityInfo.ReportCheat = nop; _G.PlayerSecurityInfo.ReportSuspicious = nop
-        _G.PlayerSecurityInfo.SendSecurityData = nop; _G.PlayerSecurityInfo.CollectSecurityInfo = nop
-    end
-end)
-
--- Flow subsystems
-pcall(function()
-    local flows = {"ClientSecMrpcsFlow","MrpcsFlow","MrpcsData","ClientCircleFlowSubsystem",
-                   "ClientKillFlowSubsystem","ClientSecPlayerKillFlow"}
-    for _, name in ipairs(flows) do
-        local mod = package.loaded[name] or _G[name]
-        if mod then
-            for k, v in pairs(mod) do
-                if type(v) == "function" and (k:find("Report") or k:find("Send") or k:find("Flow") or k:find("Record") or k:find("Process")) then
-                    pcall(function() mod[k] = nop end)
-                end
-            end
-        end
-    end
-    local cc = safe_require("GameLua.Mod.BaseMod.Client.Security.ClientCircleFlowSubsystem")
-    if cc then
-        cc.ReportCircleFlow = nop; cc.SendCircleData = nop; cc.ReportPlayerPosition = nop; cc.ReportCircleData = nop
-    end
-    if _G.ReportPlayerKillFlow then _G.ReportPlayerKillFlow = nop end
-    if _G.ClientSecPlayerKillFlow then _G.ClientSecPlayerKillFlow = nop end
-end)
-
--- Heartbeat & keep-alive
-pcall(function()
-    local heartbeats = {"Heartbeat","SendHeartbeat","ClientHeartbeat","ServerHeartbeat"}
-    for _, name in ipairs(heartbeats) do
-        if _G[name] then _G[name] = nop end
-        if _G.GameplayCallbacks and _G.GameplayCallbacks[name] then _G.GameplayCallbacks[name] = nop end
-    end
-    local SubsystemMgr = safe_require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-    if SubsystemMgr then
-        local hb = SubsystemMgr:Get("HeartbeatSubsystem")
-        if hb then
-            if hb.timer then hb:RemoveGameTimer(hb.timer) end
-            hb.SendHeartbeat = nop; hb.StartHeartbeat = nop
-        end
-    end
-end)
-
--- CoronaLab / Telemetry
-pcall(function()
-    if _G.CoronaLab then
-        _G.CoronaLab.ReportData = nop; _G.CoronaLab.SendData = nop; _G.CoronaLab.CollectData = nop; _G.CoronaLab.Telemetry = nop
-    end
-    local SubsystemMgr = safe_require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-    if SubsystemMgr then
-        local cl = SubsystemMgr:Get("CoronaLabSubsystem")
-        if cl then cl.ReportData = nop; cl.SendToServer = nop; cl.CollectTelemetry = nop; cl.StopCollection = nop end
-    end
-    _G.GlobalPlayerCoronaData = _G.GlobalPlayerCoronaData or {}
-    for k in pairs(_G.GlobalPlayerCoronaData) do _G.GlobalPlayerCoronaData[k] = nil end
-    local mt = getmetatable(_G.GlobalPlayerCoronaData) or {}
-    mt.__newindex = function() end
-    setmetatable(_G.GlobalPlayerCoronaData, mt)
-end)
-
--- Modifier Exception
-pcall(function()
-    if _G.bReportedModifierException then _G.bReportedModifierException = false end
-    local mod = safe_require("GameLua.Mod.BaseMod.Common.Security.ModifierExceptionSubsystem")
-    if mod then
-        mod.ReportException = nop; mod.CheckModifier = returnTrue; mod.ValidateModifier = returnTrue; mod.ReportModifierError = nop
-    end
-end)
-
--- Simulate Character
-pcall(function()
-    local mod = safe_require("GameLua.Mod.BaseMod.Gameplay.Simulate.SimulateCharacterSubsystem")
-    if mod then mod.ReportLocation = nop; mod.SendLocationData = nop; mod.VerifyLocation = returnTrue end
-end)
-
--- Shoot Verification
-pcall(function()
-    local mod = safe_require("GameLua.Dev.Subsystem.ShootVerifySubSystemClient")
-    if mod then
-        mod.OnShootVerifyFailed = nop; mod.SendVerifyData = nop; mod.ReportBulletHit = nop
-        mod.UploadHitInfo = nop; mod.VerifyShot = returnTrue
-    end
-    if _G.BulletHitInfoUploadData then
-        _G.BulletHitInfoUploadData.Report = nop; _G.BulletHitInfoUploadData.Send = nop; _G.BulletHitInfoUploadData.Upload = nop
-    end
-end)
-
--- Report Player Subsystems
-pcall(function()
-    local ClientSub = nil
-    for _, p in ipairs({"GameLua.Mod.BaseMod.Client.Security.ClientReportPlayerSubsystem", "Client.Security.ClientReportPlayerSubsystem"}) do
-        if package.loaded[p] then ClientSub = package.loaded[p]; break end
-        local ok, mod = pcall(require, p)
-        if ok and mod then ClientSub = mod; break end
-    end
-    if ClientSub then
-        ClientSub.OnInit = nop; ClientSub._OnPlayerKilledOtherPlayer = nop
-        ClientSub._RecordFatalDamager = nop; ClientSub._OnDeathReplayDataWhenFatalDamaged = nop
-        ClientSub._RecordMurdererFromDeathReplayData = nop; ClientSub._RecordTeammatePlayerInfo = nop
-        ClientSub._OnBattleResult = nop; ClientSub._OnShowQuickReportMutualExclusiveUI = nop
-        ClientSub.GetFatalDamagerMap = returnEmptyTable
-        ClientSub.GetCachedTeammateName2InfoMap = returnEmptyTable
-        ClientSub.GetTeammateName2InfoMapDuringBattle = returnEmptyTable
-        ClientSub.GetCurrentNotInTeamHistoricalTeammateMap = returnEmptyTable
-        ClientSub.GetInTeamIndexFromHistoricalTeammateInfo = function() return -1 end
-    end
-    local DSSub = nil
-    for _, p in ipairs({"GameLua.Mod.BaseMod.DS.Security.DSReportPlayerSubsystem", "GameLua.Mod.BaseMod.Client.Security.DSReportPlayerSubsystem"}) do
-        if package.loaded[p] then DSSub = package.loaded[p]; break end
-        local ok, mod = pcall(require, p)
-        if ok and mod then DSSub = mod; break end
-    end
-    if DSSub then
-        DSSub.OnInit = nop; DSSub._OnNearDeathOrRescued = nop; DSSub._OnCharacterDied = nop
-        DSSub._OnTeammateDamage = nop; DSSub._OnPlayerSettlementStart = nop
-        DSSub._AddKnockDownerToBattleResult = nop; DSSub._AddKillerToBattleResult = nop
-        DSSub._AddTeammateMurderToBattleResult = nop; DSSub._AddFatalDamagerMapToBattleResult = nop
-        DSSub._AddMLKillerUIDToBattleResult = nop; DSSub._SaveHistoricalTeammateInfo = nop
-        DSSub._RecordFatalDamager = nop; DSSub._RecordTeammateMurderer = nop
-    end
-    local RPUtils = safe_require("GameLua.Mod.BaseMod.Common.Security.ReportPlayerUtils")
-    if RPUtils then
-        RPUtils.RecordFatalDamager = nop; RPUtils.IsUsingHistoricalTeammateInfo = returnFalse; RPUtils.IsCharacterDeliverAI = returnFalse
-    end
-    local SecUtils = safe_require("GameLua.Mod.BaseMod.Common.Security.SecurityCommonUtils")
-    if SecUtils then SecUtils.ExtractPlayerBasicInfo = returnEmptyTable; SecUtils.LogIf = returnFalse end
-    local QuickReport = safe_require("GameLua.Mod.BaseMod.Client.Security.ClientQuickReportMaliciousTeammate")
-    if QuickReport then QuickReport.OnShowMutualExclusiveUI = nop; QuickReport.OnHideMutualExclusiveUI = nop end
-end)
-
--- Generic Subsystems Massacre
-pcall(function()
-    local SubsystemMgr = safe_require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-    if not SubsystemMgr then return end
-    local allSubs = {
-        "CoronaLabSubsystem","PlayerSecurityInfoSubsystem","ClientCircleFlowSubsystem",
-        "ModifierExceptionSubsystem","SimulateCharacterSubsystem","ShootVerifySubSystemClient",
-        "HiggsBosonComponent","ClientReportPlayerSubsystem","DSReportPlayerSubsystem",
-        "ClientHawkEyePatrolSubsystem","DSHawkEyePatrolSubsystem","ClientDataStatistcsSubsystem",
-        "AFKReportorSubsystem","BehaviorScoreSubsystem","FileCheckSubsystem","MemoryCheckSubsystem",
-        "SpeedCheckSubsystem","WallCheckSubsystem","AvatarExceptionSubsystem","GameReportSubsystem",
-        "RescueBtnReplayTraceSubsystem","ClientSecMrpcsFlowSubsystem","MrpcsFlowSubsystem",
-        "PlayerKillFlowSubsystem","CircleFlowSubsystem","SwiftHawkSubsystem","HeartbeatSubsystem",
-        "AntiCheatSubsystem","IntegrityCheckSubsystem","SignatureVerifySubsystem","MD5CheckSubsystem",
-        "PakVerifySubsystem"
-    }
-    for _, sn in ipairs(allSubs) do
-        local sub = SubsystemMgr:Get(sn)
-        if sub then
-            for k, v in pairs(sub) do
-                if type(v) == "function" and (k:find("Report") or k:find("Send") or k:find("Upload") or
-                    k:find("Verify") or k:find("Check") or k:find("Validate") or k:find("Scan") or
-                    k:find("Detect") or k:find("Collect") or k:find("Flow") or k:find("Heartbeat")) then
-                    pcall(function() sub[k] = nop end)
-                end
-            end
-            if sub.timer then pcall(function() sub:RemoveGameTimer(sub.timer) end) end
-            if sub.heartbeatTimer then pcall(function() sub:RemoveGameTimer(sub.heartbeatTimer) end) end
-            if sub.reportTimer then pcall(function() sub:RemoveGameTimer(sub.reportTimer) end) end
-        end
-    end
-end)
-
--- Global flags
-pcall(function()
-    local flags = {"ENABLE_REPORT","ENABLE_ANTI_CHEAT","ENABLE_SECURITY","ENABLE_TELEMETRY",
-                   "ENABLE_ANALYTICS","ENABLE_CRASH_REPORT","ENABLE_PERFORMANCE_REPORT"}
-    for _, f in ipairs(flags) do
-        if _G[f] then _G[f] = false end
-    end
-end)
-
--- Minor bypasses
-pcall(function()
-    local stExtra = tryImport("STExtraBlueprintFunctionLibrary")
-    if stExtra and stExtra.IsDevelopment then stExtra.IsDevelopment = returnFalse end
-    if Client then Client.IsDevelopment = returnFalse; Client.IsShipping = returnFalse end
-    if Server then Server.IsShipping = returnFalse end
-
-    local ToolReport = package.loaded["client.slua.logic.report.ToolReportUtil"]
-    if ToolReport then
-        ToolReport.IsReleaseVersion = returnFalse; ToolReport.IsWhite = returnFalse; ToolReport.GetReportSwitch = returnFalse
-    end
-
-    if _G.TApmHelper then _G.TApmHelper.postEvent = nop end
-
-    local PC = _G.PacketCallbacks
-    if PC then
-        PC.player_report_cheat = nop; PC.upload_loots_rsp = nop; PC.watch_player_exit = nop
-        PC.player_login_report = nop; PC.player_logout_report = nop; PC.server_time_report = nop
-    end
-
-    local sdm = _G.ServerDataMgr
-    if sdm and sdm.DeletablePlayerResultKey then
-        sdm.DeletablePlayerResultKey.SuspiciousHitCount = true
-        sdm.DeletablePlayerResultKey.EspTotalSimTraceCnt = true
-        sdm.DeletablePlayerResultKey.EspTotalImeFocusCnt = true
-        sdm.DeletablePlayerResultKey.ClientGravityAnomalyCount = true
-    end
-
-    local pcNotify = package.loaded["GameLua.Mod.BaseMod.Common.Security.SecurityNotifyPCFeature"]
-    if pcNotify then
-        pcNotify.ClientRPC_SyncBanID = nop; pcNotify.ClientRPC_StrongTips = nop
-        pcNotify.ClientRPC_NormalTips = nop; pcNotify.Notify = nop
-        pcNotify.ClientRPC_NotifyBan = nop; pcNotify.ClientRPC_NotifyPunish = nop
-        pcNotify.ClientRPC_NotifyIllegalProgram = nop
-    end
-
-    local secUtils = package.loaded["GameLua.Mod.BaseMod.Common.Security.SecurityCommonUtils"]
-    if secUtils and secUtils.EStrategyTypeInReplay then
-        secUtils.EStrategyTypeInReplay.EspTotalSimTraceCnt = 0
-        secUtils.EStrategyTypeInReplay.EspTotalImeFocusCnt = 0
-        secUtils.EStrategyTypeInReplay.ClientGravityAnomalyCount = 0
-        secUtils.EStrategyTypeInReplay.FlyingErrorCnt = 0
-    end
-
-    local hia = safe_require("GameLua.Mod.BaseMod.Client.Security.ClientGlueHiaSystem")
-    if hia then hia.CheckHitIntegrity = nop; hia.InitSession = nop; hia.OnBattleEnd = nop end
-
-    local Behavior = safe_require("GameLua.Mod.Escape.Gameplay.Subsystem.BehaviorScoreSubsystem")
-    if Behavior then
-        Behavior.OnHandleBehaviorScore = nop; Behavior.AIPerceptionScore = nop; Behavior.ReportBehavior = nop; Behavior.CalcFinalScore = returnZero
-    end
-
-    local BanLogic = package.loaded["client.slua.logic.ban.ClientBanLogic"]
-    if BanLogic then
-        BanLogic.OnSyncBanInfo = nop; BanLogic.OnVoiceBanNotify = nop; BanLogic.OnRealTimeVoiceBanNotify = nop
-        BanLogic.OnVoiceBanSuccess = nop; BanLogic.OnSyncMicSuspicious = nop; BanLogic.OnSyncMicPreFilter = nop
-        BanLogic.OnNotifyWarningTips = nop; BanLogic.ReqBanInfo = nop
-    end
-    local BanUtil = package.loaded["client.common.ban_util"] or _G.ban_util
-    if BanUtil then BanUtil.CheckBanStatus = returnFalse; BanUtil.GetBanTime = returnZero; BanUtil.IsBanForever = returnFalse end
-    local TTBan = package.loaded["client.logic.login.logic_tt_ban"] or _G.logic_tt_ban
-    if TTBan then TTBan.CheckIfCanCreateRole = nop; TTBan.GetCarrierInfo = function() return "[{\"mcc\":\"000\"}]" end end
-    local GodzillaBan = package.loaded["client.network.Protocol.GodzillaBanHandler"]
-    if GodzillaBan then GodzillaBan.send_godzilla_ban_req = nop; GodzillaBan.send_godzilla_unban_req = nop end
-    local AntiAddiction = package.loaded["client.network.Protocol.AntiaddctionHandler"]
-    if AntiAddiction then AntiAddiction.send_anti_addiction_req = nop; AntiAddiction.send_anti_addiction_notify = nop end
-    local AccessRestrict = package.loaded["client.network.Protocol.AccessRestrictionHandler"]
-    if AccessRestrict then
-        AccessRestrict.send_access_restriction_req = nop; AccessRestrict.send_access_restriction_notify = nop
-        AccessRestrict.on_player_cheat_state_notify = nop
-    end
-    local DeleteAccount = package.loaded["client.slua.logic.gdpr.logic_deleteaccount"]
-    if DeleteAccount then DeleteAccount.ForceDeleteAccount = returnFalse; DeleteAccount.OnReceiveDeleteNotify = nop end
-    local ComplianceUtil = package.loaded["client.slua.logic.gdpr.compliance_util"]
-    if ComplianceUtil then ComplianceUtil.CheckCompliance = nop end
-
-    local SubsystemMgr = safe_require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-    if SubsystemMgr then
-        local hawk = SubsystemMgr:Get("DSHawkEyePatrolSubsystem")
-        if hawk then hawk.MarkSuspiciousPlayer = nop end
-    end
-    if _G.DSHawkEyePatrolSubsystem then
-        _G.DSHawkEyePatrolSubsystem._OnHawkReport = nop; _G.DSHawkEyePatrolSubsystem._OnHawkImprison = nop
-        _G.DSHawkEyePatrolSubsystem.CheckPunishPlayer = nop
-    end
-    local ClientHawk = package.loaded["GameLua.Mod.BaseMod.Client.Security.ClientHawkEyePatrolSubsystem"]
-    if ClientHawk then
-        for _, fn in ipairs({"_OnHawkSync","_OnHawkReportSuccess","_StartExitGameTimer","_OnRecvInspectorBroadcastCount","SendReportTLog","ReportCheat"}) do
-            if ClientHawk[fn] then ClientHawk[fn] = nop end
-        end
-        ClientHawk.CanInspectorBroadcast = returnFalse
-    end
-    local InspectClient = package.loaded["GameLua.Mod.BaseMod.Client.Security.InspectionSystemReportClientLogicSubsystem"]
-    if InspectClient then
-        for _, fn in ipairs({"AskForInspector","ReportEnemy","KickOutOneTeam","OnReceiveInspectCmd","ClientReportData","SendReportToInspector","SendKickOutOneTeam","ClientNotifyInspectorImplementation","RecvNotifyInspector"}) do
-            if InspectClient[fn] then InspectClient[fn] = nop end
-        end
-    end
-    local InspectDS = package.loaded["GameLua.Mod.BaseMod.DS.Security.InspectionSystemReportDSLogicSubsystem"]
-    if InspectDS then
-        for _, fn in ipairs({"ServerKickOutOneTeamByPlayerImplementation","AddReportedCount","AddInspectionRecord","BanPlayerByInspection","BroadCastToAllInspector","ServerReportToInspectorImplementation","InitPlayerInspectionInfo"}) do
-            if InspectDS[fn] then InspectDS[fn] = nop end
-        end
-    end
-
-    local tlogModules = {
-        "client.network.Protocol.ClientTlogHandler","client.network.Protocol.BattleReportHandler",
-        "client.network.Protocol.ClientErrorReportHandler","client.network.Protocol.LobbyPingReportHandler",
-        "client.slua.config.tlog.tlog_report_utils","client.slua.data.BasicData.BasicDataTLogReport",
-        "client.slua.data.BasicData.BasicDataClientReport","client.slua.data.BasicData.BasicDataReport",
-        "GameLua.Mod.BaseMod.DS.Security.DSCommonTLogSubsystem","GameLua.Mod.BaseMod.DS.Security.DSFightTLogSubsystem",
-        "GameLua.Mod.BaseMod.DS.Security.DSSecurityTLogSubsystem","GameLua.Mod.BaseMod.Client.Security.ClientDataStatistcsSubsystem"
-    }
-    for _, path in ipairs(tlogModules) do
-        local mod = package.loaded[path]
-        if mod then
-            for k, v in pairs(mod) do
-                if type(v) == "function" and (k:find("Log") or k:find("Report") or k:find("Send") or k:find("Tlog")) then
-                    pcall(function() mod[k] = nop end)
-                end
-            end
-        end
-    end
-
-    local ClientError = package.loaded["client.network.Protocol.ClientErrorReportHandler"]
-    if ClientError then ClientError.send_client_error_report = nop; ClientError.send_client_crash_report = nop; ClientError.send_client_tools_batch_report_req = nop end
-    local BattleReport = package.loaded["client.network.Protocol.BattleReportHandler"]
-    if BattleReport then BattleReport.send_battle_report = nop; BattleReport.send_battle_result = nop; BattleReport.send_vod_game_report_req = nop; BattleReport.send_batch_get_vod_info_req = nop; BattleReport.send_get_game_report_req = nop; BattleReport.send_batch_get_game_report_req = nop; BattleReport.send_get_game_report_by_uid_req = nop end
-    local BugHandler = package.loaded["client.network.Protocol.BugHandler"]
-    if BugHandler then BugHandler.send_report_bug_info = nop; BugHandler.send_report_bug_feedback = nop end
-    local PingReport = package.loaded["client.network.Protocol.LobbyPingReportHandler"]
-    if PingReport then PingReport.send_lobby_ping_report = nop; PingReport.send_ingame_ping_report = nop end
-    local WeekReport = package.loaded["client.network.Protocol.WeekRportHandler"]
-    if WeekReport then WeekReport.send_week_report = nop; WeekReport.send_week_detail = nop end
-    local LogicComplaint = package.loaded["client.logic.battle.logic_complaint"]
-    if LogicComplaint then LogicComplaint.SendComplaintReq = nop; LogicComplaint.Submit = nop; LogicComplaint.ReportPlayer = nop; LogicComplaint.ShowComplaint = nop; LogicComplaint.ShowHandle = nop end
-    local OBResult = package.loaded["GameLua.Mod.BaseMod.Client.BattleResult.ProcessBase.EscapeBattleResultShowOBResultLogic"]
-    if OBResult then OBResult.OnBattleResult = nop; OBResult.OnResultProcessStart = nop end
-    local NormalOBResult = package.loaded["GameLua.Mod.BaseMod.Client.BattleResult.ProcessBase.BattleResultShowOBResultLogic"]
-    if NormalOBResult then NormalOBResult.OnBattleResult = nop; NormalOBResult.OnResultProcessStart = nop end
-    local ShowResult = package.loaded["GameLua.Mod.BaseMod.Client.BattleResult.ProcessBase.BattleResultShowResultLogic"]
-    if ShowResult then
-        ShowResult.OnBattleResult = nop; ShowResult.OnResultProcessStart = nop; ShowResult.OnResultProcessContinue = nop
-        ShowResult.ReceiveData = nop; ShowResult.SendEndFlow = nop; ShowResult.OnReport = nop; ShowResult.ShowResult = nop
-        ShowResult.ShowResultInternal = nop; ShowResult.StopResultProcess = nop
-    end
-
-    local EmuHandler = package.loaded["client.network.Protocol.EmulatorHandler"]
-    if EmuHandler then EmuHandler.send_emulator_info = nop end
-    local EmuScanner = package.loaded["client.logic.login.emulator_scanner"]
-    if EmuScanner then EmuScanner.StartScan = nop; EmuScanner.GetScanResult = returnFalse; EmuScanner.ReportScanResult = nop end
-    local LoginVerify = package.loaded["client.network.Protocol.LoginVerifyHandler"]
-    if LoginVerify then LoginVerify.send_login_verify_req = nop; LoginVerify.send_device_verify_req = nop end
-    local DSMonitor = package.loaded["client.logic.data.logic_ds_monitor"]
-    if DSMonitor then DSMonitor.OnRecordMsg = nop; DSMonitor.OnReportMsg = nop end
-    local ClientDataStat = package.loaded["GameLua.Mod.BaseMod.Client.Security.ClientDataStatistcsSubsystem"]
-    if ClientDataStat then ClientDataStat.StartToCheck = nop; ClientDataStat.OnReceiveRTT = nop; ClientDataStat.OnReceiveJitter = nop; ClientDataStat.ReportAbnormal = nop; ClientDataStat.ResetData = nop end
-    local VoiceReport = package.loaded["client.slua.logic.chat_voice.logic_chat_voice_report"]
-    if VoiceReport then VoiceReport.ReportVoiceData = nop; VoiceReport.ReportVoiceText = nop end
-    local VoiceDoctor = package.loaded["client.slua.logic.chat_voice.logic_chat_voice_doctor"]
-    if VoiceDoctor then VoiceDoctor.UploadVoiceLog = nop; VoiceDoctor.UploadVoiceException = nop end
-    local HomeAudit = package.loaded["client.slua.logic.home.Audit.logic_home_audit_state"]
-    if HomeAudit then HomeAudit.SendAuditState = nop; HomeAudit.ReportAuditResult = nop end
-    local HomeReport2 = package.loaded["client.slua.logic.home.logic_home_report"]
-    if HomeReport2 then HomeReport2.ReportHomeData = nop; HomeReport2.ReportHomeVisitor = nop end
-    local GemReport = package.loaded["client.logic.store.gem_report_utils"]
-    if GemReport then GemReport.ReportGemData = nop; GemReport.ReportGemPurchase = nop end
-    local SafeStation = package.loaded["client.slua.logic.CustomerService.LogicSafeStation"]
-    if SafeStation then SafeStation.UploadVideoEvidence = nop; SafeStation.ReportPlayerBehavior = nop end
-    local CustomerService = package.loaded["client.slua.logic.CustomerService.LogicCustomerService"]
-    if CustomerService then CustomerService.SendComplaint = nop; CustomerService.SendFeedback = nop end
-    local znq6Revive = safe_require("GameLua.Mod.TDEvent.ZNQ6th.DS.ZNQ6thDSReviveSubsystem")
-    if znq6Revive then znq6Revive.HaveNewItemForRevive = nop end
-    local znq7Revive = safe_require("GameLua.Mod.TDEvent.ZNQ7th.DS.ZNQ7DSReviveSubsystem")
-    if znq7Revive then znq7Revive.HaveChanceRevival = nop end
-    local DataLayer = safe_require("GameLua.Mod.BaseMod.Common.Subsystem.DataLayerSubsystem")
-    if DataLayer and DataLayer.OnSpectatorReplayChanged then
-        local origDL = DataLayer.OnSpectatorReplayChanged
-        DataLayer.OnSpectatorReplayChanged = function(dlSelf) _G.IsBeingWatched = true; origDL(dlSelf) end
-    end
-    local DSActive = safe_require("GameLua.Mod.PlanBT.Gameplay.Subsystem.DSActiveSubsystem")
-    if DSActive then DSActive.DelayKickOutPlayer = nop; DSActive.ActiveKickNotify = nop end
-    local CreativeDev = safe_require("GameLua.Mod.CreativeBase.Gameplay.Subsystem.CreativeDevDebugSubsystem")
-    if CreativeDev then CreativeDev.IsDebugPanelEnalbedCli = nop end
-    local CreativeDeath = safe_require("GameLua.Mod.CreativeBase.Gameplay.Subsystem.CreativeModeDeathRecordSubsystem")
-    if CreativeDeath then CreativeDeath.OnPlayerKilled = nop end
-    if _G.ClientReplayDataReporter then
-        _G.ClientReplayDataReporter.ReportIntArrayData = nop; _G.ClientReplayDataReporter.ReportFloatArrayData = nop
-    end
-    local SpectateReplay = safe_require("GameLua.Mod.BaseMod.Common.Subsystem.SpectateAndReplaySubsystem")
-    if SpectateReplay then SpectateReplay.RequestGotoSpectatingImp = nop; SpectateReplay.RequestGotoSpectating = nop end
-    local AIReplay = safe_require("GameLua.ExtraModule.MLAI.Client.AIReplaySubsystem")
-    if AIReplay then
-        AIReplay.ReportAllPlayerInfo = nop; AIReplay.ReportFrameData = nop; AIReplay.ReportPlayerInput = nop
-        if AIReplay.uCompletePlayBack then AIReplay.uCompletePlayBack.AddRecordMLAIInfo = nop; AIReplay.uCompletePlayBack.StopRecording = nop end
-    end
-    local AITracking = safe_require("GameLua.Mod.BaseMod.GamePlay.AI.AITrackingLogSubsystem")
-    if AITracking then
-        AITracking.RealLogoutTimer = nop; AITracking.LogQueue = {}; AITracking.AddToLogQue = nop; AITracking.DoPrint = nop
-        AITracking.OnAIPawnDied = nop; AITracking.OnAIPawnReceiveDamage = nop; AITracking.OnAIPawnEnemyChange = nop
-    end
-    local AFKReport = safe_require("GameLua.Mod.BaseMod.DS.Security.AFKReportorSubsystem")
-    if AFKReport then
-        AFKReport.HandleEnterFighting = nop; AFKReport.InitializePlayerInputInfo = nop; AFKReport.AddOneAFKInfo = nop
-        AFKReport.SetPlayerAFKState = nop; AFKReport.ResetPlayerInputInfo = nop; AFKReport.PlayerHaveAction = nop
-    end
-    local TDMAFK = safe_require("GameLua.Mod.TDM.Gameplay.Subsystem.TDMAFKReportorSubsystem")
-    if TDMAFK then TDMAFK.SendAFKTips = nop; TDMAFK.OnHandleLostConnection = nop end
-    local DataMgr = package.loaded["client.slua.logic.data.data_mgr"]
-    if DataMgr then DataMgr.GetWeaponSkinSoundVolumeInfoByGroup = returnZero end
-    local CreditLogic = safe_require("GameLua.Mod.BaseMod.Client.ClientInGameCreditLogic")
-    if CreditLogic then
-        CreditLogic._SendUserReaction2ExitTeamBeforeBoardingReturnLobbyNotice = nop
-        CreditLogic.ShowReturnLobbyIfFirstExitTeamBeforeBoarding = returnFalse
-        CreditLogic.OnReceiveCreditScoreChange = nop
-        CreditLogic._IsFirstExitTeamBeforeBoardingReturnLobbyNoticeEnabled = returnFalse
-        CreditLogic.SetFirstExitTeamBeforeBoardingReturnLobbyNoticeEnabled = nop
-    end
-
-    local globalFuncs = {
-        "ReportTLogEvent","SendTlog","SendClientStats","ReportHitFlow","ReportAvatarException",
-        "SendComplaintReq","SubmitReport","ReportSuspiciousPlayer","SendPacket","OnSyncBanInfo",
-        "OnVoiceBanNotify","SendSecTLog","MarkSuspiciousPlayer","ReportPlayerBehaviorData",
-        "CheckCompliance","ReportIllegalProgram","UploadVoiceLog"
-    }
-    for _, fn in ipairs(globalFuncs) do
-        if type(_G[fn]) == "function" then _G[fn] = nop end
-    end
-end)
-
--- Network blacklist hosts and file keywords
-local BLACKLIST_HOSTS = {
-    "tss.tencent","syzsdk","gcloud.qq","reportlog","tdos","logupload","feedback.wh","crash2",
-    "privacy.qq","privacy.tencent","oth.eve","mdt.qq","act.tencentyun","analytics","report.qq",
-    "anticheatexpert","crashsight","wetest","log.tav","sngd","tracer","intlsdk","igamecj",
-    "cdn.club","gpubgm","graph.facebook","calendarpushsubscription","googleads","doubleclick",
-    "firebaselogging","firebaseremoteconfig","fonts.googleapis","abs.twimg","dl.listdl",
-    "igame.gcloudcs","bugly","beacon","helpshift","tdm","apm","safeguard","weiyun","qzone",
-    "tencent-cloud","myapp","idqqimg","gtimg","qqmail","tcdn","cloudctrl","sdkostrace",
-    "103.134.189.146","mbgame","csoversea","igame","pubgmobile","down.anticheatexpert.com",
-    "asia.csoversea.mbgame.anticheatexpert.com","log.tav.qq","syzsdk.qq","logiservice.qcloud",
-    "opensdk.tencent","exp.helpshift","loginsdkapi.zingplay","firebase","googleapis","facebook","gvoice"
-}
-local FILE_KEYWORDS = {
-    "tlog","crash","bugly","report","beacon","wetest","analytics","telemetry","trace","dump",
-    "exception","feedback","aps_log","mtp_detect","network_loss","client_error","ue4crash","tdm","gcloud"
-}
-
-local function isBlacklisted(str)
-    if type(str) ~= "string" then return false end
-    local low = str:lower()
-    for _, kw in ipairs(BLACKLIST_HOSTS) do
-        if low:find(kw, 1, true) then return true end
-    end
-    return false
-end
-
-pcall(function()
-    if _G.HttpRequest then
-        local origHttp = _G.HttpRequest
-        _G.HttpRequest = function(url, ...) if isBlacklisted(url) then return nil end return origHttp(url, ...) end
-    end
-    if _G.FHttpModule and _G.FHttpModule.CreateRequest then
-        local origFH = _G.FHttpModule.CreateRequest
-        _G.FHttpModule.CreateRequest = function(...)
-            local url = select(1, ...)
-            if isBlacklisted(url) then return nil end
-            return origFH(...)
-        end
-    end
-    local netMods = {
-        "client.slua.logic.network.logic_network","client.slua.logic.download.report.puffer_tlog",
-        "client.slua.data.BasicData.BasicDataClientReport","GameLua.GameCore.Module.Network.NetworkManager",
-        "client.network.Protocol.ClientTlogHandler","client.network.Protocol.BattleReportHandler",
-        "client.network.Protocol.ClientErrorReportHandler"
-    }
-    for _, mp in ipairs(netMods) do
-        local mod = package.loaded[mp]
-        if mod then
-            for k, v in pairs(mod) do
-                if type(v) == "function" and (k:find("Http") or k:find("Request") or k:find("Send") or k:find("Upload") or k:find("Post") or k:find("Get") or k:find("Report")) then
-                    local origf = v
-                    mod[k] = function(...)
-                        local args = {...}
-                        for _, arg in ipairs(args) do if type(arg)=="string" and isBlacklisted(arg) then return nil end end
-                        return pcall(origf, ...)
-                    end
-                end
-            end
-        end
-    end
-end)
-
-local orig_io_open = io.open
-io.open = function(path, mode)
-    if type(path) == "string" then
-        local lp = path:lower()
-        for _, kw in ipairs(FILE_KEYWORDS) do
-            if lp:find(kw) then
-                if mode and (mode == "w" or mode == "a" or mode == "w+" or mode == "a+") then
-                    return nil, "Blocked"
-                end
-            end
-        end
-    end
-    return orig_io_open(path, mode)
-end
-
-if _G.UnrealEngine and _G.UnrealEngine.CrashContext then
-    _G.UnrealEngine.CrashContext = nil
-    _G.UnrealEngine.CrashContext = { SetCrashContext = nop, ReportCrash = nop, AddCrashData = nop }
-end
-
--- Device info spoofing (old fake data kept but now overridden by device bypass)
-local FakeData = {
-    deviceID = function()
-        local chars = "0123456789ABCDEF"
-        local id = ""
-        for i = 1, 32 do id = id .. chars:sub(math.random(1, #chars), math.random(1, #chars)) end
-        return id
-    end,
-    ipAddress = function() return "192.168." .. math.random(1, 255) .. "." .. math.random(1, 255) end,
-    macAddress = function()
-        return string.format("%02X:%02X:%02X:%02X:%02X:%02X",
-            math.random(0,255), math.random(0,255), math.random(0,255),
-            math.random(0,255), math.random(0,255), math.random(0,255))
-    end,
-    kernelVersion = function() return "4.19." .. math.random(100, 200) .. "-generic" end,
-}
-
--- The iPhone-related SystemInfo/Build spoofing block has been removed as requested.
--- The device ban bypass (InstallDeviceBanBypass) already provides full device ID spoofing.
-
--- Comprehensive bypass module (per-match activation)
-do
-    local bypass = {}
-    local function nop() end
-    local function returnTrue() return true end
-    local function returnFalse() return false end
-    local function returnZero() return 0 end
-    local function returnEmptyTable() return {} end
-    local function returnEmptyString() return "" end
-    local function safe_require(mod)
-        local ok, res = pcall(require, mod)
-        return ok and res or nil
-    end
-    local function tryImport(name)
-        local ok, lib = pcall(import, name)
-        return ok and lib or nil
-    end
-
-    local function blockScreenshots()
-        pcall(function()
-            local SS = tryImport("ScreenshotMaker") or tryImport("ScreenshotMTDer")
-            if SS then
-                SS.MakePicture = function() return "" end
-                SS.ReMakePicture = function() return "" end
-                SS.HasCaptured = returnTrue
-            end
-        end)
-    end
-
-    local function blockGameplayCallbacks()
-        if not _G.GameplayCallbacks then _G.GameplayCallbacks = {} end
-        local GC = _G.GameplayCallbacks
-        if GC._WHABlocked then return end
-
-        local reportFuncs = {
-            "ReportAttackFlow","ReportSecAttackFlow","ReportHurtFlow","ReportFireArms",
-            "ReportVerifyInfoFlow","ReportMrpcsFlow","ReportPlayerBehavior","ReportTeammatHurt",
-            "ReportPlayerMoveRoute","ReportPlayerPosition","ReportAimFlow","ReportHitFlow",
-            "ReportWallHack","ReportAimbot","ReportSpeedHack","ReportMagicBullet",
-            "ReportAbnormalMaterial","ReportDepthTestChange","ReportMemoryException",
-            "ReportMaterialScan","ReportShaderOverride","ReportCircleFlow",
-            "OnPlayerRPCValidateFailed","OnPlayerActorChannelError",
-            "OnPlayerSpectateException","OnShutdownAfterError"
-        }
-        for _, fn in ipairs(reportFuncs) do GC[fn] = nop end
-
-        local oldStateChanged = GC.OnDSPlayerStateChanged
-        GC.OnDSPlayerStateChanged = function(UID, state, ...)
-            if state and type(state) == "string" then
-                local s = state:lower()
-                if s:find("cheat") or s:find("ban") or s:find("integrity") then return end
-            end
-            if oldStateChanged then return oldStateChanged(UID, state, ...) end
-        end
-
-        GC._WHABlocked = true
-    end
-
-    local function spoofTssSdk()
-        pcall(function() local t = _G.TssSdk if t then t.GetFileMD5, t.VerifyFileSignature, t.CheckIntegrity, t.ScanMemory, t.IsEmulator, t.OnRecvData = function() return "" end, returnTrue, returnTrue, function() return true, {} end, returnFalse, nop end end)
-    end
-
-    local function disableDetectionSubsystems()
-        local sm = safe_require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-        if not sm then return end
-
-        local targetSubs = {
-            "ClientWallhackDetectionSubsystem", "ClientESPDetectionSubsystem",
-            "ClientAimTrackingSubsystem", "ShootVerifySubSystemClient",
-            "ClientRenderCheckSubsystem", "ClientMemoryGuardSubsystem",
-            "ClientKernelCheckSubsystem", "ClientHawkEyePatrolSubsystem",
-            "ClientAntiCheatSubsystem", "IntegrityCheckSubsystem",
-            "FileCheckSubsystem", "AvatarExceptionSubsystem"
-        }
-        for _, sn in ipairs(targetSubs) do
-            local sub = sm:Get(sn)
-            if sub then
-                for k, v in pairs(sub) do
-                    if type(v) == "function" then
-                        if k:find("Report") or k:find("Send") or k:find("Verify") or
-                           k:find("Check") or k:find("Detect") or k:find("Scan") then
-                            sub[k] = nop
-                        end
-                    end
-                end
-                if sn == "ClientWallhackDetectionSubsystem" then
-                    sub.IsVisionNormal = returnTrue
-                    sub.GetVisibilityRate = function() return math.random(60, 85) end
-                elseif sn == "ClientESPDetectionSubsystem" then
-                    sub.HasESP = returnFalse
-                    sub.CheckOverlay = function() return "clean" end
-                elseif sn == "ClientAimTrackingSubsystem" then
-                    sub.GetAimData = function()
-                        return { accuracy = math.random(45,65), headshotRate = math.random(15,35) }
-                    end
-                    sub.IsAimNormal = returnTrue
-                elseif sn == "ClientMemoryGuardSubsystem" then
-                    sub.IsMemoryClean = function() return true, {code=0} end
-                    sub.ScanResult = function() return "clean" end
-                elseif sn == "ShootVerifySubSystemClient" then
-                    sub.OnShootVerifyFailed = nop; sub.VerifyShot = returnTrue
-                end
-            end
-        end
-    end
-
-    local function spoofBehavior()
-        pcall(function()
-            local sm = safe_require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-            if not sm then return end
-
-            local hooks = {
-                ClientAimTrackingSubsystem = {
-                    GetAimData = function() return { accuracy = math.random(48,58), headshotRate = math.random(18,28) } end,
-                    IsAimNormal = returnTrue
-                },
-                ClientHawkEyePatrolSubsystem = {
-                    GetPatrolData = returnEmptyTable, IsBeingWatched = returnFalse, GetSpectatorCount = returnZero
-                },
-                ClientRenderCheckSubsystem = {
-                    IsRenderClean = returnTrue, GetRenderState = function() return "normal" end
-                },
-                ClientESPDetectionSubsystem = {
-                    HasESP = returnFalse, CheckOverlay = function() return "clean" end
-                },
-                ClientWallhackDetectionSubsystem = {
-                    IsVisionNormal = returnTrue, GetVisibilityRate = function() return math.random(70,80) end
-                }
-            }
-
-            for mod, methods in pairs(hooks) do
-                local m = sm:Get(mod)
-                if m then for k, v in pairs(methods) do m[k] = v end end
-            end
-        end)
-    end
-
-    local function disableHiggsBoson()
-        pcall(function()
-            local hbc = safe_require("GameLua.Mod.BaseMod.Common.Security.HiggsBosonComponent")
-            if hbc then
-                hbc.bMHActive = false
-                hbc.bCallPreReplication = false
-                if hbc.ControlMHActive then hbc.ControlMHActive = nop end
-                if hbc.StartAvatarCheck then hbc.StartAvatarCheck = nop end
-                if hbc.BlackList then for k in pairs(hbc.BlackList) do hbc.BlackList[k] = nil end end
-            end
-            if _G.AvatarCheckCallback then
-                _G.AvatarCheckCallback.StartAvatarCheck = nop
-                _G.AvatarCheckCallback.OnReportItemID = nop
-            end
-            _G.BlackList = {}
-        end)
-    end
-
-    local function spoofMemoryAndKernel()
-        pcall(function()
-            local sm = safe_require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
-            if sm then
-                local sub = sm:Get("ClientMemoryGuardSubsystem")
-                if sub then sub.IsMemoryClean, sub.ScanResult = function() return true, {code=0} end, function() return "clean" end end
-                sub = sm:Get("ClientKernelCheckSubsystem")
-                if sub then sub.IsKernelClean, sub.GetKernelVersion, sub.IsBootloaderLocked = returnTrue, function() return "4.19.150-generic" end, returnTrue end
-            end
-            if _G.TssSdk then _G.TssSdk.CheckKernel, _G.TssSdk.VerifyBoot = function() return true, {status="verified", tampered=false} end, function() return true, {locked=true, verified=true} end end
-        end)
-    end
-
-    function bypass.Init()
-        blockScreenshots()
-        blockGameplayCallbacks()
-        spoofTssSdk()
-        disableDetectionSubsystems()
-        spoofBehavior()
-        disableHiggsBoson()
-        spoofMemoryAndKernel()
-    end
-
-    _G.WHABypass = bypass
-end
-
--- ================================================================
--- BRPlayerCharacterBase class (FIXED – misplaced code is now inside timer)
--- ================================================================
 local BRPlayerCharacterBase = {
   ServerRPC = {},
   ClientRPC = {},
   MulticastRPC = {}
 }
-
 BRPlayerCharacterBase.ServerRPC.ServerRPC_NearDeathGiveupRescue = { Reliable = true, Params = {} }
 BRPlayerCharacterBase.ServerRPC.ServerRPC_CarryDeadBox = { Reliable = true, Params = { UEnums.EPropertyClass.Object } }
 BRPlayerCharacterBase.ServerRPC.RPC_Server_GmPlayAction = { Reliable = true, Params = { UEnums.EPropertyClass.Int } }
 BRPlayerCharacterBase.MulticastRPC.MulticastRPC_GmPlayAction = { Reliable = true, Params = { UEnums.EPropertyClass.Int } }
 BRPlayerCharacterBase.ClientRPC.RPC_Client_SetShouldCheckPassWall = { Reliable = true, Params = { UEnums.EPropertyClass.Bool } }
-BRPlayerCharacterBase.ClientRPC.ClientRPC_TriggerHighlightMoment = { Reliable = true, Params = { UEnums.EPropertyClass.UInt32, UEnums.EPropertyClass.UInt32 } }
 
-function BRPlayerCharacterBase:ctor()
-    self.bHasShownDevNotice = false
-    self.AK_NativeESP_Ready = false
-    self.bHiggsTimerSet = false
-    self._newWallhackStarted = false
+local ENetRole = import("ENetRole")
+local EPawnState = import("EPawnState")
+local GameplayData = require("GameLua.GameCore.Data.GameplayData")
+local GamePlayTools = require("GameLua.Mod.BaseMod.Common.GamePlayTools")
+
+local KismetSystemLibrary = import("KismetSystemLibrary")
+local packageName = KismetSystemLibrary.GetGameBundleId()
+
+if packageName ~= "com.tencent.ig" and packageName ~= "com.pubg.krmobile" and packageName ~= "com.pubg.imobile" and packageName ~= "com.vng.pubgmobile" and packageName ~= "com.tencent.igfit" then
+    return
 end
+    
+function BRPlayerCharacterBase:ctor() end
 
 function BRPlayerCharacterBase:_PostConstruct()
-    BRPlayerCharacterBase.__super._PostConstruct(self)
-    self:InitAddSpecialMoveInfo()
-    self.bCanNearDeathGiveup = true
-    self:StartAdvancedSystems()
+  BRPlayerCharacterBase.__super._PostConstruct(self)
+  self:InitAddSpecialMoveInfo()
+  self.bCanNearDeathGiveup = true
 end
 
 function BRPlayerCharacterBase:ReceiveBeginPlay()
-    BRPlayerCharacterBase.__super.ReceiveBeginPlay(self)
-    self:AddControlEvent(self, "MovementModeChangedDelegate", self.HandleOnMovementModeChangedNew, self)
-    if self:HasAuthority() and self:CheckAddCheckFallingDistanceComponent() then
-        local CheckFallingDistanceComponent_C = import("CheckFallingDistanceComponent")
-        if slua.isValid(CheckFallingDistanceComponent_C) and not slua.isValid(self:GetComponentByClass(CheckFallingDistanceComponent_C)) then
-            Game:AddComponent(CheckFallingDistanceComponent_C, self, "CheckFallingDistanceComponent")
+  BRPlayerCharacterBase.__super.ReceiveBeginPlay(self)
+  self:AddControlEvent(self, "MovementModeChangedDelegate", self.HandleOnMovementModeChangedNew, self)
+  if self:HasAuthority() and self:CheckAddCheckFallingDistanceComponent() then
+    local CheckFallingDistanceComponent_C = import("CheckFallingDistanceComponent")
+    if slua.isValid(CheckFallingDistanceComponent_C) and not slua.isValid(self:GetComponentByClass(CheckFallingDistanceComponent_C)) then
+      Game:AddComponent(CheckFallingDistanceComponent_C, self, "CheckFallingDistanceComponent")
+    end
+  end
+  if slua.isValid(self.STCharacterMovement) then
+    self.STCharacterMovement.bPositiveBlowUp = true
+  end
+  if self.Role == ENetRole.ROLE_AutonomousProxy then
+    self:AddControlEvent(self, "OnPawnStateDisabled", self.OnPawnStateChange, self)
+    self:AddControlEvent(self, "OnPawnStateEnabled", self.OnPawnStateChange, self)
+    self:AddControlEventConditionOnly(self, "OnAttrChangeEventDelegate", { AttrName = { "bCanSelfRescue" } }, self.CharacterAttrChangeEvent, self)
+  end
+  if Client then
+    GameplayData.AddCharacter(self.Object)
+    self:AddControlEvent(self, "OnAttachedToVehicle", self.HandleOnAttachedToVehicle, self)
+    self:AddControlEvent(self, "OnDetachedFromVehicle", self.HandleOnDetachedFromVehicle, self)
+  else
+    self:AddCommonEventWithConditions(EVENTTYPE_INGAME_NORMAL, EVENTID_GAME_MODE_STATE_CHANGE, { [1] = "FinishedState" }, self.HandleFinishedState, self)
+  end
+end
+
+function BRPlayerCharacterBase:HandleOnAttachedToVehicle(uVehicle)
+  if not slua.isValid(uVehicle) then return end
+  if self.Role == ENetRole.ROLE_SimulatedProxy then
+    self:ClearAttachToVehicleTimer()
+    self.nUpdatePlayerAttachToVehicleCount = 0
+    self.nUpdatePlayerAttachToVehicleTimer = self:AddGameTimer(5, true, function()
+      if slua.isValid(self.Object) and slua.isValid(uVehicle) then self:UpdatePlayerAttachToVehicle(uVehicle) end
+    end)
+    self.nFixMeshContainerTimer = self:AddGameTimer(3, true, function()
+      if slua.isValid(self.Object) and slua.isValid(uVehicle) then self:FixMeshContainerOffsetIfNeeded(uVehicle) end
+    end)
+  end
+end
+
+function BRPlayerCharacterBase:HandleOnDetachedFromVehicle(uLastVehicle)
+  if not slua.isValid(uLastVehicle) then return end
+  if self.Role == ENetRole.ROLE_SimulatedProxy then
+    self:ClearAttachToVehicleTimer()
+    self.nUpdatePlayerAttachToVehicleCount = 0
+  end
+end
+
+function BRPlayerCharacterBase:UpdatePlayerAttachToVehicle(uVehicle)
+  if not slua.isValid(self.Object) or not slua.isValid(uVehicle) then return end
+  if not slua.isValid(self.CapsuleComponent) or not slua.isValid(self.Mesh) or not slua.isValid(self.MeshContainer) then return end
+  if not slua.isValid(self:GetCurrentVehicle()) then return end
+  if Game:IsDriver(self.Object) then return end
+  if not self.nUpdatePlayerAttachToVehicleCount then self.nUpdatePlayerAttachToVehicleCount = 0 end
+  local ESTEPoseState = import("ESTEPoseState")
+  local bStand = self.PoseState == ESTEPoseState.Stand
+  local uActorRelativeLocation = self.CapsuleComponent:GetRelativeTransform():GetLocation()
+  local uMeshRelativeLocation = self.Mesh:GetRelativeTransform():GetLocation()
+  local uMeshContainerRelativeLocationZ = self.MeshContainer:GetRelativeTransform():GetLocation().Z
+  local nCapsuleRadius = self.CapsuleComponent:GetScaledCapsuleRadius()
+  local nCapsuleHalfHeight = self.CapsuleComponent:GetScaledCapsuleHalfHeight()
+  local uMeshContainerExpectedZ = -1 * self.StandHalfHeight
+  local nExpectedCapsuleRadius = self.StandRadius
+  local nExpectedCapsuleHalfHeight = self.StandHalfHeight
+  local uMeshExpectedRL = FVector(0, 0, 0)
+  local uActorExpectedRL = FVector(0, 0, self.StandHalfHeight)
+  local nTolerance = 1.0
+  local bCapsuleRLCorrect = uActorRelativeLocation:Equals(uActorExpectedRL, nTolerance)
+  local bMeshRLCorrect = uMeshRelativeLocation:Equals(uMeshExpectedRL, nTolerance)
+  local bMeshContainerRLCorrect = nTolerance > math.abs(uMeshContainerRelativeLocationZ - uMeshContainerExpectedZ)
+  local bCapsuleRadiusCorrect = nTolerance > math.abs(nCapsuleRadius - nExpectedCapsuleRadius)
+  local bCapsuleHalfHeightCorrect = nTolerance > math.abs(nCapsuleHalfHeight - nExpectedCapsuleHalfHeight)
+  local bAllCorrect = bStand and bCapsuleRLCorrect and bMeshRLCorrect and bMeshContainerRLCorrect and bCapsuleRadiusCorrect and bCapsuleHalfHeightCorrect
+  if not bAllCorrect then
+    self.nUpdatePlayerAttachToVehicleCount = self.nUpdatePlayerAttachToVehicleCount + 1
+  else
+    self.nUpdatePlayerAttachToVehicleCount = 0
+  end
+  if self.nUpdatePlayerAttachToVehicleCount >= 3 and not bAllCorrect then
+    local GameplayData = require("GameLua.GameCore.Data.GameplayData")
+    local uPlayerController = GameplayData.GetPlayerController()
+    if uPlayerController.ReportCrashKitFeature and uPlayerController.ReportCrashKitFeature.ReportCharacterAttachedOnVehicleException then
+      local sReportInfo = string.format("VehicleShapeType:%s PlayerKey:%s", tostring(uVehicle.VehicleShapeType), tostring(self.PlayerKey))
+      uPlayerController.ReportCrashKitFeature:ReportCharacterAttachedOnVehicleException(sReportInfo)
+    end
+    self.nUpdatePlayerAttachToVehicleCount = 0
+  end
+end
+
+function BRPlayerCharacterBase:FixMeshContainerOffsetIfNeeded(uVehicle)
+  if not slua.isValid(self.Object) or not slua.isValid(uVehicle) then return end
+  if not slua.isValid(self.MeshContainer) then return end
+  if not slua.isValid(self:GetCurrentVehicle()) then return end
+  if Game:IsDriver(self.Object) then return end
+  local nTolerance = 1.0
+  local uMeshContainerExpectedZ = -1 * self.StandHalfHeight
+  local uMeshContainerRelativeLocationZ = self.MeshContainer:GetRelativeTransform():GetLocation().Z
+  if nTolerance <= math.abs(uMeshContainerRelativeLocationZ - uMeshContainerExpectedZ) then
+    self:SetMeshContainerOffsetZ(uMeshContainerExpectedZ)
+  end
+end
+
+function BRPlayerCharacterBase:ClearAttachToVehicleTimer()
+  if self.nUpdatePlayerAttachToVehicleTimer then
+    self:RemoveGameTimer(self.nUpdatePlayerAttachToVehicleTimer)
+    self.nUpdatePlayerAttachToVehicleTimer = nil
+  end
+  if self.nFixMeshContainerTimer then
+    self:RemoveGameTimer(self.nFixMeshContainerTimer)
+    self.nFixMeshContainerTimer = nil
+  end
+end
+
+function BRPlayerCharacterBase:CharacterAttrChangeEvent(uPawn, AttrName, AttrVal)
+  BRPlayerCharacterBase.__super.CharacterAttrChangeEvent(self, uPawn, AttrName, AttrVal)
+  if self.Object ~= uPawn then return end
+  if self.Role == ENetRole.ROLE_AutonomousProxy and AttrName == "bCanSelfRescue" then
+    local uPlayerController = self:GetPlayerControllerSafety()
+    if slua.isValid(uPlayerController) then
+      uPlayerController:BroadcastUIMessage("UIMsg_CanSelfRescue", 0, "", "")
+    end
+  end
+end
+
+function BRPlayerCharacterBase:OnPawnStateChange(PawnState)
+  local EPawnState = import("EPawnState")
+  if PawnState == EPawnState.SwitchPP then
+    local uPlayerController = self:GetPlayerControllerSafety()
+    if slua.isValid(uPlayerController) then
+      uPlayerController:BroadcastUIMessage("UIMsg_FPPModeChange", 0, "", "")
+    end
+  end
+end
+
+function BRPlayerCharacterBase:HandleFinishedState()
+  if slua.isValid(self.STCharacterMovement) and self.STCharacterMovement.SetDynamicSimpleQueryConfig then
+    self.STCharacterMovement:SetDynamicSimpleQueryConfig(false)
+  end
+end
+
+function BRPlayerCharacterBase:CheckAddCheckFallingDistanceComponent()
+  if CGameMode and CGameMode.GameModeType and CGameState and CGameState.GameModeID then
+    local EGameModeType = import("EGameModeType")
+    local MatchModeIds = require("GameLua.Mod.BaseMod.GamePlay.Config.MatchModeIdsConfig")
+    local GameModeType = CGameMode.GameModeType
+    local GameModeID = tonumber(CGameState.GameModeID)
+    local bModeTypeSatisfy = GameModeType == EGameModeType.ETypicalGameMode or GameModeType == EGameModeType.EFourInOneGameMode or GameModeType == EGameModeType.EHeavyWeaponGameMode
+    local bModeIDSatisfy = not MatchModeIds[GameModeID]
+    return bModeTypeSatisfy and bModeIDSatisfy
+  end
+  return false
+end
+
+function BRPlayerCharacterBase:LuaHandleParachuteStateChanged(LastParachuteState, NewParachuteState)
+  BRPlayerCharacterBase.__super.LuaHandleParachuteStateChanged(self, LastParachuteState, NewParachuteState)
+  local EParachuteState = import("EParachuteState")
+  if not Client then
+    local uCurrentPlayerControl = self:GetPlayerControllerSafety()
+    if slua.isValid(uCurrentPlayerControl) and uCurrentPlayerControl.CheckParachuteOpenFeature then
+      if NewParachuteState == EParachuteState.PS_Opening then
+        if uCurrentPlayerControl.CheckParachuteOpenFeature.SatrtCheckShowParachuteCloseUI then
+          uCurrentPlayerControl.CheckParachuteOpenFeature:SatrtCheckShowParachuteCloseUI()
+        end
+      elseif NewParachuteState == EParachuteState.PS_None then
+        if uCurrentPlayerControl.CheckParachuteOpenFeature.RecoverParachuteOpenParam then
+          uCurrentPlayerControl.CheckParachuteOpenFeature:RecoverParachuteOpenParam()
+        end
+        if uCurrentPlayerControl.CheckParachuteOpenFeature.ClearTimerAndState then
+          uCurrentPlayerControl.CheckParachuteOpenFeature:ClearTimerAndState()
+        end
+      end
+    end
+  end
+end
+
+function BRPlayerCharacterBase:OnLanded()
+  if self.HandleOnLanded then self:HandleOnLanded(-1) end
+  if not Client then
+    local uCurrentPlayerControl = self:GetPlayerControllerSafety()
+    if slua.isValid(uCurrentPlayerControl) and uCurrentPlayerControl.CheckParachuteOpenFeature then
+      if uCurrentPlayerControl.CheckParachuteOpenFeature.ClearTimerAndState then
+        uCurrentPlayerControl.CheckParachuteOpenFeature:ClearTimerAndState()
+      end
+      if uCurrentPlayerControl.CheckParachuteOpenFeature.ResetCheckShowUI then
+        uCurrentPlayerControl.CheckParachuteOpenFeature:ResetCheckShowUI()
+      end
+    end
+  end
+end
+
+function BRPlayerCharacterBase:ReceiveEndPlay(EndPlayReason)
+  BRPlayerCharacterBase.__super.ReceiveEndPlay(self, EndPlayReason)
+  if Client then GameplayData.RemoveCharacter(self.Object) end
+end
+
+function BRPlayerCharacterBase:IsWarGameMode()
+  local GameplayData = require("GameLua.GameCore.Data.GameplayData")
+  local uGameState = GameplayData:GetGameState()
+  local STExtraGameStateBase = import("STExtraGameStateBase")
+  if slua.isValid(uGameState) and Game:IsClassOf(uGameState, STExtraGameStateBase) then
+    local EGameModeType = import("EGameModeType")
+    return uGameState.GameModeType == EGameModeType.EWarGameMode
+  end
+  return false
+end
+
+function BRPlayerCharacterBase:BPOnRecycled() if Client then self:ResetMeshRelativeLocationAndRotation() end end
+function BRPlayerCharacterBase:BPOnRespawned() if Client then self:ResetMeshRelativeLocationAndRotation() end end
+
+function BRPlayerCharacterBase:ReceiveOnRecycle()
+  if Client then
+    self:ResetMeshRelativeLocationAndRotation()
+    GameplayData.RemoveCharacter(self.Object)
+  end
+end
+
+function BRPlayerCharacterBase:ReceiveOnSpawn()
+  if Client then
+    self:ResetMeshRelativeLocationAndRotation()
+    GameplayData.AddCharacter(self.Object)
+  end
+end
+
+function BRPlayerCharacterBase:ResetMeshRelativeLocationAndRotation()
+  if Game:IsValid(self.Object) and Game:IsValid(self.Mesh) then
+    local uDefaultMeshRot = FRotator(0, -90, 0)
+    local uDefaultMeshRelativeLoc = FVector(0, 0, 0)
+    if self.Mesh.K2_SetRelativeRotation then
+      self.Mesh:K2_SetRelativeRotation(uDefaultMeshRot, false, nil, false)
+    end
+    self:CacheInitialMeshOffset(uDefaultMeshRelativeLoc, uDefaultMeshRot)
+  end
+end
+
+function BRPlayerCharacterBase:HandleOnMovementModeChangedNew()
+  local EMovementMode = import("EMovementMode")
+  if Game:IsValid(self.STCharacterMovement) and self.STCharacterMovement.MovementMode == EMovementMode.MOVE_Swimming and self:CheckBaseIsMoveable() then
+    self.CharacterMovement:SetBase(nil, "", true)
+  end
+  if self.Role == ENetRole.ROLE_AutonomousProxy and Game:IsValid(self.STCharacterMovement) and self.STCharacterMovement.MovementMode == EMovementMode.MOVE_Walking and UIManager.UI_Config_InGame.ParachuteOpenUI then
+    UIManager.CloseUI(UIManager.UI_Config_InGame.ParachuteOpenUI)
+  end
+end
+
+function BRPlayerCharacterBase:BPOnMissPlayerDamageRecord() end
+
+BRPlayerCharacterBase.ClientRPC.ClientRPC_TriggerHighlightMoment = { Reliable = true, Params = { UEnums.EPropertyClass.UInt32, UEnums.EPropertyClass.UInt32 } }
+
+function BRPlayerCharacterBase:ClientRPC_TriggerHighlightMoment(Type, Param)
+  EventSystem:postEvent(EVENTTYPE_INGAME, EVENTID_INGAME_TRIGGER_HIGHLIGHT_MOMENT, Type, Param)
+end
+
+function BRPlayerCharacterBase:ParachuteJump()
+  local uPlayerController = self:GetControllerSafety()
+  if slua.isValid(uPlayerController) then
+    if not self:GetEnsure() then
+      local EStateType = import("EStateType")
+      if uPlayerController:GetCurrentStateType() ~= EStateType.State_ParachuteJump and uPlayerController:GetCurrentStateType() ~= EStateType.State_ParachuteOpen then
+        local ESTEPoseState = import("ESTEPoseState")
+        self:SwitchPoseState(ESTEPoseState.Stand, true, true, true, false)
+        uPlayerController:ReInitParachuteItem()
+        uPlayerController:ServerChangeStatePC(EStateType.State_ParachuteJump)
+      end
+    else
+      EventSystem:postEvent(EVENTTYPE_INGAME_NORMAL, EVENTID_AI_CALL_PARACHUTE_JUMP, self.Object)
+    end
+  end
+end
+
+function BRPlayerCharacterBase:CheckForbidFlaregun()
+  local uPlayerState = self:GetPlayerStateSafety()
+  if not slua.isValid(uPlayerState) then return false end
+  if uPlayerState.CanUseFlaregun == false and self:IsLocallyControlled() then
+    local uPlayerController = self:GetPlayerControllerSafety()
+    if slua.isValid(uPlayerController) then uPlayerController:DisplayGameTipWithMsgID(48532) end
+  end
+  return not uPlayerState.CanUseFlaregun
+end
+
+function BRPlayerCharacterBase:ServerRPC_NearDeathGiveupRescue() self:HandleNearDeathGiveupRescue() end
+
+function BRPlayerCharacterBase:HandleNearDeathGiveupRescue()
+  local uNearDeathComp = self.NearDeatchComponent
+  if self:IsNearDeath() and slua.isValid(uNearDeathComp) and self.bCanNearDeathGiveup == true then
+    local uPlayerState = self:GetPlayerStateSafety()
+    if slua.isValid(uPlayerState) then uPlayerState:AddGeneralCount(1613, 1, false) end
+    uNearDeathComp:TriggerGotoDieExplictly(self.Object)
+  end
+end
+
+function BRPlayerCharacterBase:RPC_Server_GmPlayAction(actionId)
+  local USTExtraBlueprintFunctionLibrary = import("STExtraBlueprintFunctionLibrary")
+  if USTExtraBlueprintFunctionLibrary.IsDevelopment() then self:MulticastRPC_GmPlayAction(actionId) end
+end
+
+function BRPlayerCharacterBase:MulticastRPC_GmPlayAction(actionId)
+  if not Client then return end
+  local uPlayEmoteComp = self:GetPlayEmoteComponent()
+  if not slua.isValid(uPlayEmoteComp) then return end
+  local LogFilter = require("common.log_filter")
+  LogFilter.SetLogTreeEnable(true)
+  local animCfg = CDataTable.GetTableData("EmoteBPTable", actionId)
+  if not animCfg then return end
+  local handlePath = animCfg.Path
+  local EmoteHandleAsset = slua.loadObject(handlePath)
+  local assetsArray = slua.Array(UEnums.EPropertyClass.Struct, import("/Script/CoreUObject.SoftObjectPath"))
+  local handle = EmoteHandleAsset()
+  uPlayEmoteComp:OnLoadEmoteAssetBegin(handle, actionId, assetsArray, "")
+  local tb = FuncUtil.LuaArrayToTable(assetsArray)
+  local asset_util = require("common.asset_util")
+  local loadLater = function() uPlayEmoteComp:OnLoadEmoteAssetEnd(handle, actionId, 0) end
+  asset_util.GetAssetsArrayAsyncParallel(tb, loadLater)
+end
+
+function BRPlayerCharacterBase:RPC_Client_SetShouldCheckPassWall(bServerSyncShouldCheckPassWall)
+  if slua.isValid(self.ParachuteComponent) then
+    self.ParachuteComponent.bServerSyncShouldCheckPassWall = bServerSyncShouldCheckPassWall
+  end
+end
+
+function BRPlayerCharacterBase:OnPlayerEnterCarryBoxState()
+  self.Super:OnPlayerEnterCarryBoxState()
+  if self.CarryDeadBoxFeature then self.CarryDeadBoxFeature:OnPlayerEnterCarryBoxState() end
+end
+
+function BRPlayerCharacterBase:OnPlayerLeaveCarryBoxState(bInIsInterrupt)
+  self.Super:OnPlayerLeaveCarryBoxState(bInIsInterrupt)
+  if self.CarryDeadBoxFeature then self.CarryDeadBoxFeature:OnPlayerLeaveCarryBoxState(bInIsInterrupt) end
+end
+
+function BRPlayerCharacterBase:ServerRPC_CarryDeadBox(uInDeadBox)
+  if slua.isValid(uInDeadBox) and Game:IsClassOf(uInDeadBox, import("/Script/ShadowTrackerExtra.PlayerTombBox")) and self.CarryDeadBoxFeature then
+    self.CarryDeadBoxFeature:CarryDeadBox(uInDeadBox)
+  end
+end
+
+function BRPlayerCharacterBase:SetAreaID(AreaID) self:SetAttrValue("AreaID", AreaID, -1) end
+function BRPlayerCharacterBase:GetAreaID() return math.floor(self:GetAttrValue("AreaID") + 0.5) end
+function BRPlayerCharacterBase:CannotChangeIntoPetSpectator() return self.bCannotChangeIntoPetSpectator end
+
+function BRPlayerCharacterBase:DoModChangeToBT()
+  if self:HasState(EPawnState.SpecialSuit) then self:TriggerEntrySkillWithID(4301101, true) end
+end
+
+function BRPlayerCharacterBase:SwitchCameraToParachuteOpening()
+  self.Super:SwitchCameraToParachuteOpening()
+  if self.ParachuteFormation and self.ParachuteFormation.ShouldApplyFormationCamera and self.ParachuteFormation:ShouldApplyFormationCamera() then
+    self.ParachuteFormation:OverlayFormationCameraParams()
+  end
+end
+
+function BRPlayerCharacterBase:SwitchCameraToParachuteFalling()
+  self.Super:SwitchCameraToParachuteFalling()
+  if self.ParachuteFormation and self.ParachuteFormation.ShouldApplyFormationCamera and self.ParachuteFormation:ShouldApplyFormationCamera() then
+    self.ParachuteFormation:OverlayFormationCameraParams()
+  end
+end
+
+function BRPlayerCharacterBase:SwitchCameraToNormal()
+  self.Super:SwitchCameraToNormal()
+  if self.ParachuteFormation and self.ParachuteFormation.OnLandingClearFormationCamera then
+    self.ParachuteFormation:OnLandingClearFormationCamera()
+  end
+end
+
+function BRPlayerCharacterBase:SwitchWeaponCheck(Slot, IgnoreState)
+  if self:HasState(EPawnState.AttachToOther) then
+    local Weapon = self:GetWeaponBySlot(Slot)
+    if slua.isValid(Weapon) then
+      local WeaponID = Weapon:GetWeaponID()
+      local AttachToOtherConfig = GamePlayTools.GetCurrentConfig("AttachToOtherConfig")
+      if AttachToOtherConfig and AttachToOtherConfig.CheckIsWeaponInBlackList and AttachToOtherConfig.CheckIsWeaponInBlackList(WeaponID) then
+        local uPlayerController = self:GetPlayerControllerSafety()
+        if Client and slua.isValid(uPlayerController) and uPlayerController.Role == ENetRole.ROLE_AutonomousProxy then
+          uPlayerController:DisplayGameTipWithMsgID(47306)
+        end
+        return false
+      end
+    end
+  end
+  return self.Super:SwitchWeaponCheck(Slot, IgnoreState)
+end
+
+-- ==============================================================================
+-- START MOD LOGIC
+-- ==============================================================================
+
+-- LOW-END OPTIMIZED CONSTANTS
+local LOW_END_MODE = true
+
+local LOOP_INTERVAL       = LOW_END_MODE and 0.6 or 0.4
+local AIMBOT_INTERVAL     = LOW_END_MODE and 0.033 or 0.016
+local SCAN_INTERVAL       = LOW_END_MODE and 1.5 or 0.8
+local MESH_CACHE_TIME     = LOW_END_MODE and 5.0 or 3.0
+local ESP_MAX_DIST        = LOW_END_MODE and 300 or 400
+local BONE_LOD_DIST       = LOW_END_MODE and 30 or 50
+local ESP6_UPDATE_INTERVAL= LOW_END_MODE and 0.1 or 0.05
+
+local C_GREEN = {R=0, G=255, B=0, A=255}
+local C_RED = {R=255, G=0, B=0, A=255}
+local C_CYAN = {R=0, G=255, B=255, A=255}
+local C_YELLOW = {R=255, G=255, B=0, A=255}
+local C_WHITE = {R=255, G=255, B=255, A=255}
+
+local GLOBAL_BONE_LIST = {
+    "head", "neck_01", "pelvis",
+    "upperarm_r", "lowerarm_r", "hand_r",
+    "upperarm_l", "lowerarm_l", "hand_l",
+    "thigh_l", "calf_l", "foot_l",
+    "thigh_r", "calf_r", "foot_r"
+}
+local GLOBAL_BONE_LIST_LOW = { "head", "pelvis", "neck_01" }
+
+_G.BNTMODConfig = _G.BNTMODConfig or { 
+    EspVip = false, UnlockFPS = false, IpadView = false, EspStatic = false,
+    EspEnemyCount = false, EspWeaponStatus = false,
+    CustomAimbot = false, CustomAimbotClose = false, 
+    CustomHRecoil = false, CustomVRecoil = false, LessShake = false, 
+    RemoveGrass = false, RemoveTrees = false, 
+    -- WhiteBody REMOVED
+    ColorBodyNew = false,
+    Crosshair = false, Accuracy = false, BlackSky = false,
+    MortarAim = false, MortarVisCheck = false, EspWeapon = false,
+    Weapon_M416 = false, Weapon_AKM = false, Weapon_SCAR = false,
+    Weapon_M16A4 = false, Weapon_M762 = false, Weapon_Groza = false,
+    Weapon_AUG = false, Weapon_QBZ = false, Weapon_G36C = false,
+    Weapon_FAMAS = false, Weapon_Kar98k = false, Weapon_M24 = false,
+    Weapon_AWM = false, Weapon_SKS = false, Weapon_SLR = false,
+    Weapon_Mini14 = false, Weapon_Mk14 = false, Weapon_VSS = false,
+    Weapon_QBU = false, Weapon_Mosin = false, Weapon_AMR = false,
+    Weapon_UMP45 = false, Weapon_UZI = false, Weapon_Vector = false,
+    Weapon_Tommy = false, Weapon_Bizon = false, Weapon_MP5K = false,
+    Weapon_P90 = false, Weapon_M249 = false, Weapon_DP28 = false,
+    Weapon_MG3 = false, Weapon_S686 = false, Weapon_S1897 = false,
+    Weapon_S12K = false, Weapon_DBS = false, Weapon_Origin = false,
+    Weapon_Crossbow = false, Weapon_Deagle = false, Weapon_Flare = false,
+    Veh_MiradoOrange = false, Veh_MiradoRed = false, Veh_Dacia = false,
+    Veh_Buggy = false, Veh_UAZ_Old = false, Veh_Motorcycle = false,
+    Veh_Helicopter = false, Veh_BRDM = false, Veh_Minibus = false,
+    Veh_MonsterTruck = false, Veh_UAZ = false, Veh_Pickup = false,
+    AimTouchEnable = false, AimTouchHipIgKnock = true, AimTouchHipIgBot = true,
+    AimTouchSGIgKnock = true, AimTouchSGIgBot = true, AimTouchHipVisCheck = true,
+    AimTouchSGVisCheck = true, AimTouchHipfire = false, AimTouchSG = false,
+    AimTouchSGAutoFire = false, AimTouchScopeAll = false, AimTouchScopeIgKnock = true,
+    AimTouchScopeIgBot = true, AimTouchScopeVisCheck = true, AimTouchScopeSniper = false,
+    AimTouchSniperIgKnock = true, AimTouchSniperIgBot = true, AimTouchSniperVisCheck = true,
+}
+
+_G.BNTMODState = _G.BNTMODState or { 
+    LoopToken = 0, AimbotLoopToken = 0, NativeESPReady = false,
+    GraphicsUnlocked = false, MenuStep = 0, LastCmdTime = 0,
+    TrackedMarks = {}, EnemyMarks = {}, LastAimbotCheckTime = 0,
+    CustomTextData = nil, LastAimbotConfigString = "",
+    PrevGraphicsState = {},
+}
+
+local limitTime = os.time({ year = 2027, month = 10, day = 1, hour = 23, min = 59, sec = 0 })
+local currentTime = os.time(os.date("!*t"))
+local isExpired = false
+
+pcall(function()
+    local fileName = ".sys_time_cache"
+    local paths = {
+        "//storage/emulated/0/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/SaveGames/" .. fileName,
+        "//storage/emulated/0/Android/data/com.pubg.krmobile/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/SaveGames/" .. fileName,
+        "//storage/emulated/0/Android/data/com.pubg.imobile/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/SaveGames/" .. fileName,
+        "//storage/emulated/0/Android/data/com.vng.pubgmobile/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/SaveGames/" .. fileName,
+        "//storage/emulated/0/Android/data/com.tencent.igfit/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/SaveGames/" .. fileName,
+        "ShadowTrackerExtra/Saved/SaveGames/" .. fileName,
+        "../../ShadowTrackerExtra/Saved/SaveGames/" .. fileName,
+    }
+    local tm = package.loaded["client.logic.common.TimeManager"]
+    if not tm then 
+        local s, r = pcall(require, "client.logic.common.TimeManager")
+        if s and r then tm = r end
+    end
+    if tm and type(tm.GetServerTime) == "function" then
+        local serverTime = tm.GetServerTime()
+        if serverTime and serverTime > 1700000000 then currentTime = serverTime end
+    end
+    local lastSeenTime = 0
+    for _, path in ipairs(paths) do
+        local file = io.open(path, "r")
+        if file then
+            local data = file:read("*a")
+            local savedTime = tonumber(data) or 0
+            if savedTime > lastSeenTime then lastSeenTime = savedTime end
+            file:close()
         end
     end
-    if slua.isValid(self.STCharacterMovement) then
-        self.STCharacterMovement.bPositiveBlowUp = true
-    end
-    if self.Role == ENetRole.ROLE_AutonomousProxy then
-        self:AddControlEvent(self, "OnPawnStateDisabled", self.OnPawnStateChange, self)
-        self:AddControlEvent(self, "OnPawnStateEnabled", self.OnPawnStateChange, self)
-        self:AddControlEventConditionOnly(self, "OnAttrChangeEventDelegate", { AttrName = { "bCanSelfRescue" } }, self.CharacterAttrChangeEvent, self)
-    end
-    if Client then
-        GameplayData.AddCharacter(self.Object)
+    if currentTime < lastSeenTime then currentTime = lastSeenTime
     else
-        self:AddCommonEventWithConditions(EVENTTYPE_INGAME_NORMAL, EVENTID_GAME_MODE_STATE_CHANGE, { [1] = "FinishedState" }, self.HandleFinishedState, self)
+        for _, path in ipairs(paths) do
+            local file = io.open(path, "w")
+            if file then file:write(tostring(currentTime)); file:close() end
+        end
     end
-    EventSystem:postEvent(EVENTTYPE_SINGLETRAINING, EVENTID_CHARACTER_BEGINPLAY, self.Object)
+end)
+
+isExpired = (currentTime > limitTime)
+
+-- ========================================== 
+-- MAP MARK
+-- ========================================== 
+local function SafeAddMark(id, pos, z, str, size, actor)
+    local mark = nil
+    pcall(function()
+        local InGameMarkTools = require("GameLua.Mod.BaseMod.Common.InGameMarkTools")
+        if InGameMarkTools and InGameMarkTools.ClientAddMapMark then
+            mark = InGameMarkTools.ClientAddMapMark(id, pos, z, str, size, actor)
+            if mark then _G.BNTMODState.TrackedMarks[mark] = true end
+        end
+    end)
+    return mark
 end
 
-function BRPlayerCharacterBase:ReceiveEndPlay(endPlayReason)
-    BRPlayerCharacterBase.__super.ReceiveEndPlay(self, endPlayReason)
-    if Client and GameplayData.RemoveCharacter then GameplayData.RemoveCharacter(self.Object) end
+local function SafeRemoveMark(mark)
+    if not mark then return end
+    pcall(function()
+        local InGameMarkTools = require("GameLua.Mod.BaseMod.Common.InGameMarkTools")
+        if InGameMarkTools and InGameMarkTools.HideMapMark then InGameMarkTools.HideMapMark(mark) end
+        if InGameMarkTools and InGameMarkTools.RemoveMapMark then InGameMarkTools.RemoveMapMark(mark) end
+    end)
+    _G.BNTMODState.TrackedMarks[mark] = nil
 end
 
--- 🔥 FIXED: all logic now inside the timer, no extra 'end' at EOF
-function BRPlayerCharacterBase:StartAdvancedSystems()
-    if not Client then return end
-    if not CheckExpiration() then ShowExpiryPopup(true); return end
-    InitDistanceMarkerSystem()
+local function GetSafeEnemyKey(enemy)
+    if Valid(enemy) then
+        if enemy.PlayerKey then return tostring(enemy.PlayerKey) end
+        if type(enemy.GetUniqueID) == "function" then return tostring(enemy:GetUniqueID()) end
+    end
+    return tostring(enemy)
+end
 
-    if not self.bHiggsTimerSet then
-        self.bHiggsTimerSet = true
-        self:AddGameTimer(0.1, true, function()
-            if not slua.isValid(self.Object) then return end
+local function CheckIsAI(pawn, markData)
+    if markData.AK_IS_BOT ~= nil then return markData.AK_IS_BOT, true end
+    local isAI = false
+    local hasChecked = false
+    pcall(function()
+        if pawn.bIsAI == true or pawn.IsAI == true then isAI = true; hasChecked = true end
+        if type(pawn.IsBot) == "function" and pawn:IsBot() then isAI = true; hasChecked = true end
+        local pState = pawn.PlayerState or (type(pawn.GetPlayerState) == "function" and pawn:GetPlayerState())
+        if Valid(pState) then
+            hasChecked = true
+            if pState.bIsABot == true or pState.bIsBot == true then isAI = true end
+        end
+        if not isAI then
+            local name = pawn.PlayerName or (type(pawn.GetPlayerName) == "function" and pawn:GetPlayerName()) or ""
+            if name ~= "" and (name:find("Cobra") or name:find("Target") or name:find("bot_") or name:find("b_")) then
+                isAI = true; hasChecked = true
+            end
+        end
+    end)
+    if hasChecked then markData.AK_IS_BOT = isAI end
+    return isAI, hasChecked
+end
+
+-- ========================================== 
+-- CONFIG STORAGE
+-- ========================================== 
+local function GetConfigPaths(fileName)
+    local paths = {
+        "//storage/emulated/0/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/" .. fileName,
+        "//storage/emulated/0/Android/data/com.vng.pubgmobile/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/" .. fileName,
+        "//storage/emulated/0/Android/data/com.pubg.krmobile/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/" .. fileName,
+        "//storage/emulated/0/Android/data/com.rekoo.pubgm/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/" .. fileName,
+        "//storage/emulated/0/Android/data/com.pubg.imobile/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/" .. fileName,
+        "//storage/emulated/0/Android/data/com.tencent.igfit/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/SaveGames/" .. fileName,
+        "/Documents/ShadowTrackerExtra/Saved/Paks/" .. fileName,
+        "/Documents/ShadowTrackerExtra/Saved/Paks/puffer_temp/" .. fileName,
+        "ShadowTrackerExtra/Saved/Paks/" .. fileName,
+        "../../ShadowTrackerExtra/Saved/Paks/" .. fileName,
+        fileName
+    }
+    pcall(function()
+        if os and os.getenv then
+            local homeDir = os.getenv("HOME")
+            if homeDir and homeDir ~= "" then
+                table.insert(paths, 1, homeDir .. "/Documents/ShadowTrackerExtra/Saved/Paks/" .. fileName)
+            end
+        end
+    end)
+    return paths
+end
+
+local ConfigFileName = "POLO_OWNERl_SAFE.txt"
+_G.LastConfigSaveStr = ""
+
+_G.SaveModSettings = function()
+    pcall(function()
+        local data = "return {\nBNTMODConfig = {\n"
+        for k, v in pairs(_G.BNTMODConfig or {}) do
+            data = data .. "  [\"" .. tostring(k) .. "\"] = " .. tostring(v) .. ",\n"
+        end
+        data = data .. "},\nCustomTextData = {\n"
+        if _G.BNTMODState and _G.BNTMODState.CustomTextData then
+            for k, v in pairs(_G.BNTMODState.CustomTextData) do
+                data = data .. "  [\"" .. tostring(k) .. "\"] = " .. tostring(v) .. ",\n"
+            end
+        end
+        data = data .. "}\n}"
+        if data == _G.LastConfigSaveStr then return end
+        _G.LastConfigSaveStr = data
+        local paths = GetConfigPaths(ConfigFileName)
+        for _, path in ipairs(paths) do
+            local file = io.open(path, "w")
+            if file then file:write(data); file:close(); break end
+        end
+    end)
+end
+
+_G.LoadModSettings = function()
+    pcall(function()
+        local paths = GetConfigPaths(ConfigFileName)
+        local content = nil
+        for _, path in ipairs(paths) do
+            local file = io.open(path, "r")
+            if file then content = file:read("*a"); file:close(); break end
+        end
+        if content then
+            local func = load(content)
+            if func then
+                local savedData = func()
+                if savedData and type(savedData) == "table" then
+                    if savedData.BNTMODConfig then
+                        for k, v in pairs(savedData.BNTMODConfig) do _G.BNTMODConfig[k] = v end
+                    end
+                    if savedData.CustomTextData then
+                        _G.BNTMODState.CustomTextData = _G.BNTMODState.CustomTextData or {}
+                        for k, v in pairs(savedData.CustomTextData) do _G.BNTMODState.CustomTextData[k] = v end
+                    end
+                end
+            end
+        end
+        _G.SaveModSettings() 
+    end)
+end
+
+local function AutoSaveLoop()
+    pcall(function() if _G.SaveModSettings then _G.SaveModSettings() end end)
+    pcall(function()
+        local okTicker, ticker = pcall(require, "common.time_ticker") 
+        if okTicker and ticker and ticker.AddTimerOnce then 
+            ticker.AddTimerOnce(5.0, AutoSaveLoop)
+        end
+    end)
+end
+
+if not _G.ModConfigLoaded then
+    _G.LoadModSettings()
+    AutoSaveLoop()
+    _G.ModConfigLoaded = true
+end
+
+_G.ReadLiveConfig = function() if _G.SaveModSettings then _G.SaveModSettings() end end
+
+-- ========================================== 
+-- VIP MENU SYSTEM
+-- ========================================== 
+function _G.InitModMenuTab()
+    if _G.ModMenuInitialized then return end
+    _G.ModMenuInitialized = true
+
+    _G.BNTMODState.CustomTextData = _G.BNTMODState.CustomTextData or {
+        OuterSpeed = 10, InnerSpeed = 10, OuterRecoil = 0, HRecoil = 0.3, VRecoil = 0.3, IpadViewFOV = 120,
+        AimTouchHipPrio = 1, AimTouchHipBone = 1, AimTouchHipCond = 1, AimTouchHipSpeed = 50, AimTouchHipFOV = 30, AimTouchHipDist = 250,
+        AimTouchSGPrio = 1, AimTouchSGBone = 2, AimTouchSGCond = 1, AimTouchSGSpeed = 80, AimTouchSGFOV = 40, AimTouchSGDist = 30,
+        AimTouchScopePrio = 1, AimTouchScopeBone = 2, AimTouchScopeCond = 1, AimTouchScopeSpeed = 40, AimTouchScopeFOV = 20, AimTouchScopeDist = 300, AimTouchScopePred = 0, AimTouchScopeRecoil = 0,
+        AimTouchSniperPrio = 1, AimTouchSniperBone = 1, AimTouchSniperCond = 2, AimTouchSniperSpeed = 30, AimTouchSniperFOV = 20, AimTouchSniperDist = 400, AimTouchSniperPred = 0, MortarCond = 2, MortarSpeed = 2, MortarFOV = 2, MortarDist = 2,
+    }
+
+    local LocUtil = _G.LocUtil
+    if not LocUtil and package.loaded["client.common.LocUtil"] then
+        LocUtil = require("client.common.LocUtil")
+    end
+    if LocUtil and not LocUtil._IsModMenuHooked then
+        local old_get = LocUtil.GetLocalizeResStr
+        LocUtil.GetLocalizeResStr = function(id)
+            if type(id) == "string" and not tonumber(id) then return id end
+            return old_get(id)
+        end
+        LocUtil._IsModMenuHooked = true
+    end
+
+    local SettingPageDefine = require("client.logic.NewSetting.SettingPageDefine")
+    local SettingCatalog = require("client.logic.NewSetting.SettingCatalog")
+    
+    if not SettingPageDefine.ModMenu then
+        local AliasMap = require("client.slua.umg.NewSetting.Item.AliasMap") 
+        
+        local StackIteam = {
+            { Key = "ModMenu_ESP1", UI = AliasMap.TitleSwitcher, Text = "▶ ESP (AUTO SETUP)", GetFunc = function() return _G.BNTMODConfig.EspVip end, SetFunc = function(c,v) _G.BNTMODConfig.EspVip = v return true end },
+            { Key = "ModMenu_EspStatic_Ex", UI = AliasMap.TitleSwitcher, Text = "▶ PLAYER INFO", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.EspStatic end, SetFunc = function(c,v) _G.BNTMODConfig.EspStatic = v return true end },
+            { Key = "ModMenu_EspEnemyCount", UI = AliasMap.Switcher, Text = "   ESP ENEMY COUNT", ExpandHandle = "ModMenu_EspStatic_Ex", GetFunc = function() return _G.BNTMODConfig.EspEnemyCount end, SetFunc = function(c,v) _G.BNTMODConfig.EspEnemyCount = v return true end },
+            { Key = "ModMenu_EspWeaponStatus", UI = AliasMap.Switcher, Text = "   ESP WEAPON & STATUS ENEMY", ExpandHandle = "ModMenu_EspStatic_Ex", GetFunc = function() return _G.BNTMODConfig.EspWeaponStatus end, SetFunc = function(c,v) _G.BNTMODConfig.EspWeaponStatus = v return true end },
+            { Key = "ModMenu_Rifile_Ex", UI = AliasMap.TitleSwitcher, Text = "▶ RIFLE", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.EspRifleCategory or false end, SetFunc = function(c,v) _G.BNTMODConfig.EspRifleCategory = v return true end },
+            { Key = "ModMenu_Weapon_M416", UI = AliasMap.Switcher, Text = "M416", ExpandHandle = "ModMenu_Rifile_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_M416 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_M416 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_AKM", UI = AliasMap.Switcher, Text = "AKM", ExpandHandle = "ModMenu_Rifile_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_AKM end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_AKM = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_SCAR", UI = AliasMap.Switcher, Text = "SCAR-L", ExpandHandle = "ModMenu_Rifile_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_SCAR end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_SCAR = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_M16A4", UI = AliasMap.Switcher, Text = "M16A4", ExpandHandle = "ModMenu_Rifile_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_M16A4 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_M16A4 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_M762", UI = AliasMap.Switcher, Text = "Beryl M762", ExpandHandle = "ModMenu_Rifile_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_M762 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_M762 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_Groza", UI = AliasMap.Switcher, Text = "Groza", ExpandHandle = "ModMenu_Rifile_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_Groza end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_Groza = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_AUG", UI = AliasMap.Switcher, Text = "AUG", ExpandHandle = "ModMenu_Rifile_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_AUG end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_AUG = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_QBZ", UI = AliasMap.Switcher, Text = "QBZ", ExpandHandle = "ModMenu_Rifile_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_QBZ end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_QBZ = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_G36C", UI = AliasMap.Switcher, Text = "G36C", ExpandHandle = "ModMenu_Rifile_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_G36C end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_G36C = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_FAMAS", UI = AliasMap.Switcher, Text = "FAMAS", ExpandHandle = "ModMenu_Rifile_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_FAMAS end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_FAMAS = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Sniper_Ex", UI = AliasMap.TitleSwitcher, Text = "▶ SNIPER & DMR", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.EspSniperCategory or false end, SetFunc = function(c,v) _G.BNTMODConfig.EspSniperCategory = v return true end },
+            { Key = "ModMenu_Weapon_Kar98k", UI = AliasMap.Switcher, Text = "Kar98k", ExpandHandle = "ModMenu_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_Kar98k end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_Kar98k = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_M24", UI = AliasMap.Switcher, Text = "M24", ExpandHandle = "ModMenu_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_M24 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_M24 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_AWM", UI = AliasMap.Switcher, Text = "AWM", ExpandHandle = "ModMenu_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_AWM end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_AWM = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_SKS", UI = AliasMap.Switcher, Text = "SKS", ExpandHandle = "ModMenu_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_SKS end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_SKS = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_SLR", UI = AliasMap.Switcher, Text = "SLR", ExpandHandle = "ModMenu_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_SLR end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_SLR = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_Mini14", UI = AliasMap.Switcher, Text = "Mini14", ExpandHandle = "ModMenu_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_Mini14 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_Mini14 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_Mk14", UI = AliasMap.Switcher, Text = "Mk14", ExpandHandle = "ModMenu_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_Mk14 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_Mk14 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_VSS", UI = AliasMap.Switcher, Text = "VSS", ExpandHandle = "ModMenu_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_VSS end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_VSS = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_QBU", UI = AliasMap.Switcher, Text = "QBU", ExpandHandle = "ModMenu_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_QBU end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_QBU = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_Mosin", UI = AliasMap.Switcher, Text = "Mosin Nagant", ExpandHandle = "ModMenu_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_Mosin end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_Mosin = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_AMR", UI = AliasMap.Switcher, Text = "Lynx AMR", ExpandHandle = "ModMenu_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_AMR end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_AMR = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_SMG_Ex", UI = AliasMap.TitleSwitcher, Text = "▶ SMG & LMG", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.EspSMGCategory or false end, SetFunc = function(c,v) _G.BNTMODConfig.EspSMGCategory = v return true end },
+            { Key = "ModMenu_Weapon_UMP45", UI = AliasMap.Switcher, Text = "UMP45", ExpandHandle = "ModMenu_SMG_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_UMP45 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_UMP45 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_UZI", UI = AliasMap.Switcher, Text = "Micro UZI", ExpandHandle = "ModMenu_SMG_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_UZI end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_UZI = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_Vector", UI = AliasMap.Switcher, Text = "Vector", ExpandHandle = "ModMenu_SMG_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_Vector end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_Vector = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_Tommy", UI = AliasMap.Switcher, Text = "Tommy Gun", ExpandHandle = "ModMenu_SMG_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_Tommy end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_Tommy = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_Bizon", UI = AliasMap.Switcher, Text = "PP-19 Bizon", ExpandHandle = "ModMenu_SMG_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_Bizon end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_Bizon = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_MP5K", UI = AliasMap.Switcher, Text = "MP5K", ExpandHandle = "ModMenu_SMG_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_MP5K end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_MP5K = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_P90", UI = AliasMap.Switcher, Text = "P90", ExpandHandle = "ModMenu_SMG_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_P90 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_P90 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_M249", UI = AliasMap.Switcher, Text = "M249", ExpandHandle = "ModMenu_SMG_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_M249 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_M249 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_DP28", UI = AliasMap.Switcher, Text = "DP-28", ExpandHandle = "ModMenu_SMG_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_DP28 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_DP28 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_MG3", UI = AliasMap.Switcher, Text = "MG3", ExpandHandle = "ModMenu_SMG_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_MG3 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_MG3 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Shotgun_Ex", UI = AliasMap.TitleSwitcher, Text = "▶ SHOTGUN & PISTOL", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.EspShotgunCategory or false end, SetFunc = function(c,v) _G.BNTMODConfig.EspShotgunCategory = v return true end },
+            { Key = "ModMenu_Weapon_S686", UI = AliasMap.Switcher, Text = "S686", ExpandHandle = "ModMenu_Shotgun_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_S686 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_S686 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_S1897", UI = AliasMap.Switcher, Text = "S1897", ExpandHandle = "ModMenu_Shotgun_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_S1897 end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_S1897 = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_S12K", UI = AliasMap.Switcher, Text = "S12K", ExpandHandle = "ModMenu_Shotgun_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_S12K end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_S12K = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_DBS", UI = AliasMap.Switcher, Text = "DBS", ExpandHandle = "ModMenu_Shotgun_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_DBS end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_DBS = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_Origin", UI = AliasMap.Switcher, Text = "Origin 12", ExpandHandle = "ModMenu_Shotgun_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_Origin end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_Origin = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_Crossbow", UI = AliasMap.Switcher, Text = "Crossbow", ExpandHandle = "ModMenu_Shotgun_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_Crossbow end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_Crossbow = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_Deagle", UI = AliasMap.Switcher, Text = "Desert Eagle", ExpandHandle = "ModMenu_Shotgun_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_Deagle end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_Deagle = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Weapon_Flare", UI = AliasMap.Switcher, Text = "Flare Gun", ExpandHandle = "ModMenu_Shotgun_Ex", GetFunc = function() return _G.BNTMODConfig.Weapon_Flare end, SetFunc = function(c,v) _G.BNTMODConfig.Weapon_Flare = v _G.WeaponCache = {} return true end },
+            { Key = "ModMenu_Vehicle_Ex", UI = AliasMap.TitleSwitcher, Text = "▶ VEHICLES & OTHERS", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.EspVehicleCategory or false end, SetFunc = function(c,v) _G.BNTMODConfig.EspVehicleCategory = v return true end },
+            { Key = "ModMenu_Veh_MiradoOrange", UI = AliasMap.Switcher, Text = "Mirado", ExpandHandle = "ModMenu_Vehicle_Ex", GetFunc = function() return _G.BNTMODConfig.Veh_MiradoOrange end, SetFunc = function(c,v) _G.BNTMODConfig.Veh_MiradoOrange = v _G.VehicleCache = {} return true end },
+            { Key = "ModMenu_Veh_MiradoRed", UI = AliasMap.Switcher, Text = "Mirado (RED)", ExpandHandle = "ModMenu_Vehicle_Ex", GetFunc = function() return _G.BNTMODConfig.Veh_MiradoRed end, SetFunc = function(c,v) _G.BNTMODConfig.Veh_MiradoRed = v _G.VehicleCache = {} return true end },
+            { Key = "ModMenu_Veh_Dacia", UI = AliasMap.Switcher, Text = "Dacia", ExpandHandle = "ModMenu_Vehicle_Ex", GetFunc = function() return _G.BNTMODConfig.Veh_Dacia end, SetFunc = function(c,v) _G.BNTMODConfig.Veh_Dacia = v _G.VehicleCache = {} return true end },
+            { Key = "ModMenu_Veh_Buggy", UI = AliasMap.Switcher, Text = "Buggy", ExpandHandle = "ModMenu_Vehicle_Ex", GetFunc = function() return _G.BNTMODConfig.Veh_Buggy end, SetFunc = function(c,v) _G.BNTMODConfig.Veh_Buggy = v _G.VehicleCache = {} return true end },
+            { Key = "ModMenu_Veh_UAZ_Old", UI = AliasMap.Switcher, Text = "Old Sedan / Coupe", ExpandHandle = "ModMenu_Vehicle_Ex", GetFunc = function() return _G.BNTMODConfig.Veh_UAZ_Old end, SetFunc = function(c,v) _G.BNTMODConfig.Veh_UAZ_Old = v _G.VehicleCache = {} return true end },
+            { Key = "ModMenu_Veh_Motorcycle", UI = AliasMap.Switcher, Text = "Motorcycle", ExpandHandle = "ModMenu_Vehicle_Ex", GetFunc = function() return _G.BNTMODConfig.Veh_Motorcycle end, SetFunc = function(c,v) _G.BNTMODConfig.Veh_Motorcycle = v _G.VehicleCache = {} return true end },
+            { Key = "ModMenu_Veh_Helicopter", UI = AliasMap.Switcher, Text = "Helicopter / Plane", ExpandHandle = "ModMenu_Vehicle_Ex", GetFunc = function() return _G.BNTMODConfig.Veh_Helicopter end, SetFunc = function(c,v) _G.BNTMODConfig.Veh_Helicopter = v _G.VehicleCache = {} return true end },
+            { Key = "ModMenu_Veh_BRDM", UI = AliasMap.Switcher, Text = "BRDM-2", ExpandHandle = "ModMenu_Vehicle_Ex", GetFunc = function() return _G.BNTMODConfig.Veh_BRDM end, SetFunc = function(c,v) _G.BNTMODConfig.Veh_BRDM = v _G.VehicleCache = {} return true end },
+            { Key = "ModMenu_Veh_Minibus", UI = AliasMap.Switcher, Text = "Minibus", ExpandHandle = "ModMenu_Vehicle_Ex", GetFunc = function() return _G.BNTMODConfig.Veh_Minibus end, SetFunc = function(c,v) _G.BNTMODConfig.Veh_Minibus = v _G.VehicleCache = {} return true end },
+            { Key = "ModMenu_Veh_MonsterTruck", UI = AliasMap.Switcher, Text = "Monster Truck", ExpandHandle = "ModMenu_Vehicle_Ex", GetFunc = function() return _G.BNTMODConfig.Veh_MonsterTruck end, SetFunc = function(c,v) _G.BNTMODConfig.Veh_MonsterTruck = v _G.VehicleCache = {} return true end },
+            { Key = "ModMenu_Veh_UAZ", UI = AliasMap.Switcher, Text = "UAZ (Jeep)", ExpandHandle = "ModMenu_Vehicle_Ex", GetFunc = function() return _G.BNTMODConfig.Veh_UAZ end, SetFunc = function(c,v) _G.BNTMODConfig.Veh_UAZ = v _G.VehicleCache = {} return true end },
+            { Key = "ModMenu_Veh_Pickup", UI = AliasMap.Switcher, Text = "Pickup / Rony", ExpandHandle = "ModMenu_Vehicle_Ex", GetFunc = function() return _G.BNTMODConfig.Veh_Pickup end, SetFunc = function(c,v) _G.BNTMODConfig.Veh_Pickup = v _G.VehicleCache = {} return true end },
+        }
+
+        local StackAimbotForce = {
+            { Key = "ModMenu_AT_Ex", UI = AliasMap.TitleSwitcher, Text = "▶ UR/SCRIM PLAYER - TOUCH AIM", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.AimTouchEnable end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchEnable = v return true end },
+            { Key = "ModMenu_AT_Hip_Ex", UI = AliasMap.TitleSwitcher, Text = "   ▶ Hipfire Aimbot", ExpandHandle = "ModMenu_AT_Ex", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.AimTouchHipfire end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchHipfire = v return true end },
+            { Key = "ModMenu_AT_Hip_IgKnock", UI = AliasMap.Switcher, Text = "      Ignore Knocked Enemies", ExpandHandle = "ModMenu_AT_Hip_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchHipIgKnock end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchHipIgKnock = v return true end },
+            { Key = "ModMenu_AT_Hip_IgBot", UI = AliasMap.Switcher, Text = "      Ignore Bots", ExpandHandle = "ModMenu_AT_Hip_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchHipIgBot end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchHipIgBot = v return true end },
+            { Key = "ModMenu_AT_Hip_Vis", UI = AliasMap.Switcher, Text = "      Visibility Check", ExpandHandle = "ModMenu_AT_Hip_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchHipVisCheck end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchHipVisCheck = v return true end },
+            { Key = "ModMenu_AT_Hip_Prio", UI = AliasMap.Slider, Text = "      Aim Target", ExpandHandle = "ModMenu_AT_Hip_Ex", MinValue = 1, MaxValue = 4, min = 1, max = 4, Min = 1, Max = 4, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchHipPrio or 1 end, SetFunc = function(c,v) local val = math.floor(v+0.5); if val < 1 then val = 1 end; if val > 4 then val = 4 end; _G.BNTMODState.CustomTextData.AimTouchHipPrio = val return true end },
+            { Key = "ModMenu_AT_Hip_Bone", UI = AliasMap.Slider, Text = "      Bone Target", ExpandHandle = "ModMenu_AT_Hip_Ex", MinValue = 1, MaxValue = 4, min = 1, max = 4, Min = 1, Max = 4, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchHipBone or 1 end, SetFunc = function(c,v) local val = math.floor(v+0.5); if val < 1 then val = 1 end; if val > 4 then val = 4 end; _G.BNTMODState.CustomTextData.AimTouchHipBone = val return true end },
+            { Key = "ModMenu_AT_Hip_Cond", UI = AliasMap.Slider, Text = "      Condition", ExpandHandle = "ModMenu_AT_Hip_Ex", MinValue = 1, MaxValue = 2, min = 1, max = 2, Min = 1, Max = 2, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchHipCond or 1 end, SetFunc = function(c,v) local val = math.floor(v+0.5); if val < 1 then val = 1 end; if val > 2 then val = 2 end; _G.BNTMODState.CustomTextData.AimTouchHipCond = val return true end },
+            { Key = "ModMenu_AT_Hip_Spd", UI = AliasMap.Slider, Text = "      Aim / Speed Smooth", ExpandHandle = "ModMenu_AT_Hip_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchHipSpeed or 50 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchHipSpeed = v return true end },
+            { Key = "ModMenu_AT_Hip_FOV", UI = AliasMap.Slider, Text = "      FOV Range", ExpandHandle = "ModMenu_AT_Hip_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchHipFOV or 30 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchHipFOV = v return true end },
+            { Key = "ModMenu_AT_Hip_Dist", UI = AliasMap.Slider, Text = "      Distance", ExpandHandle = "ModMenu_AT_Hip_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return math.floor((_G.BNTMODState.CustomTextData.AimTouchHipDist or 250) / 5) end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchHipDist = v * 5 return true end },
+            { Key = "ModMenu_AT_ScopeAll_Ex", UI = AliasMap.TitleSwitcher, Text = "   ▶ Scoped Aimbot (All Weapons)", ExpandHandle = "ModMenu_AT_Ex", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.AimTouchScopeAll end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchScopeAll = v return true end },
+            { Key = "ModMenu_AT_ScopeAll_IgKnock", UI = AliasMap.Switcher, Text = "      Ignore Knocked Enemies", ExpandHandle = "ModMenu_AT_ScopeAll_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchScopeIgKnock end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchScopeIgKnock = v return true end },
+            { Key = "ModMenu_AT_ScopeAll_IgBot", UI = AliasMap.Switcher, Text = "      Ignore Bots", ExpandHandle = "ModMenu_AT_ScopeAll_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchScopeIgBot end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchScopeIgBot = v return true end },
+            { Key = "ModMenu_AT_ScopeAll_Vis", UI = AliasMap.Switcher, Text = "      Visibility Check", ExpandHandle = "ModMenu_AT_ScopeAll_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchScopeVisCheck end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchScopeVisCheck = v return true end },
+            { Key = "ModMenu_AT_ScopeAll_Prio", UI = AliasMap.Slider, Text = "      Scope Target", ExpandHandle = "ModMenu_AT_ScopeAll_Ex", MinValue = 1, MaxValue = 4, min = 1, max = 4, Min = 1, Max = 4, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchScopePrio or 1 end, SetFunc = function(c,v) local val = math.floor(v+0.5); if val < 1 then val = 1 end; if val > 4 then val = 4 end; _G.BNTMODState.CustomTextData.AimTouchScopePrio = val return true end },
+            { Key = "ModMenu_AT_ScopeAll_Bone", UI = AliasMap.Slider, Text = "      Bone Target", ExpandHandle = "ModMenu_AT_ScopeAll_Ex", MinValue = 1, MaxValue = 4, min = 1, max = 4, Min = 1, Max = 4, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchScopeBone or 2 end, SetFunc = function(c,v) local val = math.floor(v+0.5); if val < 1 then val = 1 end; if val > 4 then val = 4 end; _G.BNTMODState.CustomTextData.AimTouchScopeBone = val return true end },
+            { Key = "ModMenu_AT_ScopeAll_Cond", UI = AliasMap.Slider, Text = "      Condition", ExpandHandle = "ModMenu_AT_ScopeAll_Ex", MinValue = 1, MaxValue = 2, min = 1, max = 2, Min = 1, Max = 2, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchScopeCond or 1 end, SetFunc = function(c,v) local val = math.floor(v+0.5); if val < 1 then val = 1 end; if val > 2 then val = 2 end; _G.BNTMODState.CustomTextData.AimTouchScopeCond = val return true end },
+            { Key = "ModMenu_AT_ScopeAll_Spd", UI = AliasMap.Slider, Text = "      Scope Aim Speed", ExpandHandle = "ModMenu_AT_ScopeAll_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchScopeSpeed or 40 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchScopeSpeed = v return true end },
+            { Key = "ModMenu_AT_ScopeAll_FOV", UI = AliasMap.Slider, Text = "      FOV Range", ExpandHandle = "ModMenu_AT_ScopeAll_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchScopeFOV or 20 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchScopeFOV = v return true end },
+            { Key = "ModMenu_AT_ScopeAll_Dist", UI = AliasMap.Slider, Text = "      Distance", ExpandHandle = "ModMenu_AT_ScopeAll_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return math.floor((_G.BNTMODState.CustomTextData.AimTouchScopeDist or 300) / 5) end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchScopeDist = v * 5 return true end },
+            { Key = "ModMenu_AT_ScopeAll_Pred", UI = AliasMap.Slider, Text = "      Movement Prediction", ExpandHandle = "ModMenu_AT_ScopeAll_Ex", MinValue = 0, MaxValue = 100, min = 0, max = 100, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchScopePred or 0 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchScopePred = v return true end },
+            { Key = "ModMenu_AT_ScopeAll_Recoil", UI = AliasMap.Slider, Text = "      Auto Recoil Compensation", ExpandHandle = "ModMenu_AT_ScopeAll_Ex", MinValue = 0, MaxValue = 50, min = 0, max = 50, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchScopeRecoil or 0 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchScopeRecoil = v return true end },
+            { Key = "ModMenu_AT_SG_Ex", UI = AliasMap.TitleSwitcher, Text = "   ▶ Shotgun Aimbot", ExpandHandle = "ModMenu_AT_Ex", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.AimTouchSG end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchSG = v return true end },
+            { Key = "ModMenu_AT_SG_AutoFire", UI = AliasMap.Switcher, Text = "      Auto Fire", ExpandHandle = "ModMenu_AT_SG_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchSGAutoFire end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchSGAutoFire = v return true end },
+            { Key = "ModMenu_AT_SG_IgKnock", UI = AliasMap.Switcher, Text = "      Ignore Knocked Enemies", ExpandHandle = "ModMenu_AT_SG_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchSGIgKnock end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchSGIgKnock = v return true end },
+            { Key = "ModMenu_AT_SG_IgBot", UI = AliasMap.Switcher, Text = "      Ignore Bots", ExpandHandle = "ModMenu_AT_SG_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchSGIgBot end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchSGIgBot = v return true end },
+            { Key = "ModMenu_AT_SG_Vis", UI = AliasMap.Switcher, Text = "      Visibility Check", ExpandHandle = "ModMenu_AT_SG_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchSGVisCheck end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchSGVisCheck = v return true end },
+            { Key = "ModMenu_AT_SG_Prio", UI = AliasMap.Slider, Text = "      Priority", ExpandHandle = "ModMenu_AT_SG_Ex", MinValue = 1, MaxValue = 4, min = 1, max = 4, Min = 1, Max = 4, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchSGPrio or 1 end, SetFunc = function(c,v) local val = math.floor(v+0.5); if val < 1 then val = 1 end; if val > 4 then val = 4 end; _G.BNTMODState.CustomTextData.AimTouchSGPrio = val return true end },
+            { Key = "ModMenu_AT_SG_Bone", UI = AliasMap.Slider, Text = "      Bone Target", ExpandHandle = "ModMenu_AT_SG_Ex", MinValue = 1, MaxValue = 4, min = 1, max = 4, Min = 1, Max = 4, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchSGBone or 2 end, SetFunc = function(c,v) local val = math.floor(v+0.5); if val < 1 then val = 1 end; if val > 4 then val = 4 end; _G.BNTMODState.CustomTextData.AimTouchSGBone = val return true end },
+            { Key = "ModMenu_AT_SG_Cond", UI = AliasMap.Slider, Text = "      Condition", ExpandHandle = "ModMenu_AT_SG_Ex", MinValue = 1, MaxValue = 2, min = 1, max = 2, Min = 1, Max = 2, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchSGCond or 1 end, SetFunc = function(c,v) local val = math.floor(v+0.5); if val < 1 then val = 1 end; if val > 2 then val = 2 end; _G.BNTMODState.CustomTextData.AimTouchSGCond = val return true end },
+            { Key = "ModMenu_AT_SG_Spd", UI = AliasMap.Slider, Text = "      Smoothing / Speed", ExpandHandle = "ModMenu_AT_SG_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchSGSpeed or 80 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchSGSpeed = v return true end },
+            { Key = "ModMenu_AT_SG_FOV", UI = AliasMap.Slider, Text = "      FOV Range", ExpandHandle = "ModMenu_AT_SG_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchSGFOV or 40 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchSGFOV = v return true end },
+            { Key = "ModMenu_AT_SG_Dist", UI = AliasMap.Slider, Text = "      Distance", ExpandHandle = "ModMenu_AT_SG_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchSGDist or 30 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchSGDist = v return true end },
+            { Key = "ModMenu_AT_Sniper_Ex", UI = AliasMap.TitleSwitcher, Text = "   ▶ Scoped Aimbot (Sniper Only)", ExpandHandle = "ModMenu_AT_Ex", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.AimTouchScopeSniper end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchScopeSniper = v return true end },
+            { Key = "ModMenu_AT_Sniper_IgKnock", UI = AliasMap.Switcher, Text = "      Ignore Knocked Enemies", ExpandHandle = "ModMenu_AT_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchSniperIgKnock end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchSniperIgKnock = v return true end },
+            { Key = "ModMenu_AT_Sniper_IgBot", UI = AliasMap.Switcher, Text = "      Ignore Bots", ExpandHandle = "ModMenu_AT_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchSniperIgBot end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchSniperIgBot = v return true end },
+            { Key = "ModMenu_AT_Sniper_Vis", UI = AliasMap.Switcher, Text = "      Visibility Check", ExpandHandle = "ModMenu_AT_Sniper_Ex", GetFunc = function() return _G.BNTMODConfig.AimTouchSniperVisCheck end, SetFunc = function(c,v) _G.BNTMODConfig.AimTouchSniperVisCheck = v return true end },
+            { Key = "ModMenu_AT_Sniper_Prio", UI = AliasMap.Slider, Text = "      Priority", ExpandHandle = "ModMenu_AT_Sniper_Ex", MinValue = 1, MaxValue = 4, min = 1, max = 4, Min = 1, Max = 4, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchSniperPrio or 1 end, SetFunc = function(c,v) local val = math.floor(v+0.5); if val < 1 then val = 1 end; if val > 4 then val = 4 end; _G.BNTMODState.CustomTextData.AimTouchSniperPrio = val return true end },
+            { Key = "ModMenu_AT_Sniper_Bone", UI = AliasMap.Slider, Text = "      Bone Target", ExpandHandle = "ModMenu_AT_Sniper_Ex", MinValue = 1, MaxValue = 4, min = 1, max = 4, Min = 1, Max = 4, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchSniperBone or 1 end, SetFunc = function(c,v) local val = math.floor(v+0.5); if val < 1 then val = 1 end; if val > 4 then val = 4 end; _G.BNTMODState.CustomTextData.AimTouchSniperBone = val return true end },
+            { Key = "ModMenu_AT_Sniper_Cond", UI = AliasMap.Slider, Text = "      Condition", ExpandHandle = "ModMenu_AT_Sniper_Ex", MinValue = 1, MaxValue = 2, min = 1, max = 2, Min = 1, Max = 2, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchSniperCond or 2 end, SetFunc = function(c,v) local val = math.floor(v+0.5); if val < 1 then val = 1 end; if val > 2 then val = 2 end; _G.BNTMODState.CustomTextData.AimTouchSniperCond = val return true end },
+            { Key = "ModMenu_AT_Sniper_Spd", UI = AliasMap.Slider, Text = "      Smoothing / Speed", ExpandHandle = "ModMenu_AT_Sniper_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchSniperSpeed or 30 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchSniperSpeed = v return true end },
+            { Key = "ModMenu_AT_Sniper_FOV", UI = AliasMap.Slider, Text = "      FOV Range", ExpandHandle = "ModMenu_AT_Sniper_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchSniperFOV or 20 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchSniperFOV = v return true end },
+            { Key = "ModMenu_AT_Sniper_Dist", UI = AliasMap.Slider, Text = "      Distance", ExpandHandle = "ModMenu_AT_Sniper_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return math.floor((_G.BNTMODState.CustomTextData.AimTouchSniperDist or 400) / 5) end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchSniperDist = v * 5 return true end },
+            { Key = "ModMenu_AT_Sniper_Pred", UI = AliasMap.Slider, Text = "      Movement Prediction", ExpandHandle = "ModMenu_AT_Sniper_Ex", MinValue = 0, MaxValue = 100, min = 0, max = 100, GetFunc = function() return _G.BNTMODState.CustomTextData.AimTouchSniperPred or 0 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.AimTouchSniperPred = v return true end },
+            { Key = "ModMenu_Crosshair_Ex", UI = AliasMap.TitleSwitcher, Text = "▶ SMALL CROSSHAIR", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.Crosshair end, SetFunc = function(c,v) _G.BNTMODConfig.Crosshair = v return true end },
+            { Key = "ModMenu_Accuracy", UI = AliasMap.TitleSwitcher, Text = "▶ Straight-Flying Bullet", GetFunc = function() return _G.BNTMODConfig.Accuracy end, SetFunc = function(c,v) _G.BNTMODConfig.Accuracy = v return true end },
+            { Key = "ModMenu_Mortar_Ex", UI = AliasMap.TitleSwitcher, Text = "▶ MORTAR AIMBOT", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.MortarAim end, SetFunc = function(c,v) _G.BNTMODConfig.MortarAim = v return true end },
+            { Key = "ModMenu_MortarDist", UI = AliasMap.Slider, Text = "      • Max Distance (Meters)", Min = 100, Max = 1000, Step = 50, ExpandHandle = "ModMenu_Mortar_Ex", GetFunc = function() return _G.BNTMODState.CustomTextData.MortarDist end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.MortarDist = v return true end },
+            { Key = "ModMenu_MortarFOV", UI = AliasMap.Slider, Text = "      • FOV Range", Min = 10, Max = 180, Step = 5, ExpandHandle = "ModMenu_Mortar_Ex", GetFunc = function() return _G.BNTMODState.CustomTextData.MortarFOV end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.MortarFOV = v return true end },
+            { Key = "ModMenu_MortarSpeed", UI = AliasMap.Slider, Text = "      • Aim Speed", Min = 10, Max = 100, Step = 5, ExpandHandle = "ModMenu_Mortar_Ex", GetFunc = function() return _G.BNTMODState.CustomTextData.MortarSpeed end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.MortarSpeed = v return true end }
+        }
+
+        local StackCombatGraphic = {
+            { Key = "ModMenu_Ipad_Ex", UI = AliasMap.TitleSwitcher, Text = "▶ iPad View", ExpandIndex = 0, GetFunc = function() return _G.BNTMODConfig.IpadView end, SetFunc = function(c,v) _G.BNTMODConfig.IpadView = v return true end },
+            { Key = "ModMenu_Ipad_FOV", UI = AliasMap.Slider, Text = "   FOV Angle", ExpandHandle = "ModMenu_Ipad_Ex", MinValue = 1, MaxValue = 100, min = 1, max = 100, GetFunc = function() return (_G.BNTMODState.CustomTextData.IpadViewFOV or 120) - 80 end, SetFunc = function(c,v) _G.BNTMODState.CustomTextData.IpadViewFOV = 80 + v return true end },
+            { Key = "ModMenu_165FPS", UI = AliasMap.TitleSwitcher, Text = "▶ Unlock 165 FPS", GetFunc = function() return _G.BNTMODConfig.UnlockFPS end, SetFunc = function(c,v) _G.BNTMODConfig.UnlockFPS = v; if v then _G.BNTMODState.GraphicsUnlocked = false end return true end },
+            -- ColorBodyNew (Wall & Color Purple/Yellow)
+            { Key = "ModMenu_ColorBodyNew", UI = AliasMap.TitleSwitcher, Text = "▶ Wall & Color (Purple/Yellow)", GetFunc = function() return _G.BNTMODConfig.ColorBodyNew end, SetFunc = function(c,v) _G.BNTMODConfig.ColorBodyNew = v return true end },
+            -- WhiteBody REMOVED
+            { Key = "ModMenu_BlackSky", UI = AliasMap.TitleSwitcher, Text = "▶ Black Sky", GetFunc = function() return _G.BNTMODConfig.BlackSky end, SetFunc = function(c,v) _G.BNTMODConfig.BlackSky = v return true end },
+            { Key = "ModMenu_RemoveGrass", UI = AliasMap.TitleSwitcher, Text = "▶ Remove Grass", GetFunc = function() return _G.BNTMODConfig.RemoveGrass end, SetFunc = function(c,v) _G.BNTMODConfig.RemoveGrass = v return true end },
+            { Key = "ModMenu_RemoveTrees", UI = AliasMap.TitleSwitcher, Text = "▶ Remove Trees", GetFunc = function() return _G.BNTMODConfig.RemoveTrees end, SetFunc = function(c,v) _G.BNTMODConfig.RemoveTrees = v return true end },               
+        }
+
+        SettingPageDefine.ModMenu = {
+        Key = "ModMenu",
+        Text= "POLO_OWNERl MENU",
+        UIKey = "Setting_Page_Privacy", 
+        Category = {
+            { Key = "Cat_ESP_ITEAM", Text= "ESP & ITEAM", Stack = StackIteam },
+            { Key = "Cat_Aimbot_Force", Text= "UR/ROOM-TOUCH AIM", Stack = StackAimbotForce },
+            { Key = "Cat_Combat_Graphic", Text= "WALLHACK/FPS", Stack = StackCombatGraphic },
+        }
+    }
+        
+    table.insert(SettingCatalog, 1, SettingPageDefine.ModMenu)
+end
+
+    local UIManager = _G.UIManager
+    if UIManager and not UIManager._IsModMenuHooked then
+        local old_ShowUI = UIManager.ShowUI
+        UIManager.ShowUI = function(config, ...)
+            local args = {...}
+            local n = select('#', ...) 
+            if config and config.keyName and (string.find(string.lower(config.keyName), "setting_main") or string.find(string.lower(config.keyName), "setting")) then
+                local catalog = args[1]
+                if type(catalog) == "table" then
+                    local hasModMenu = false
+                    for _, page in ipairs(catalog) do
+                        if type(page) == "table" and page.Key == "ModMenu" then hasModMenu = true; break end
+                    end
+                    if not hasModMenu then table.insert(catalog, 1, SettingPageDefine.ModMenu) end
+                end
+            end
+            local table_unpack = table.unpack or unpack
+            return old_ShowUI(config, table_unpack(args, 1, n))
+        end
+        UIManager._IsModMenuHooked = true
+    end
+end
+
+-- ============================================================================
+-- FULL LICENSE KEY SYSTEM (Lua)
+-- API: https://cnc-web.online/verify_key.php
+-- ============================================================================
+local LicenseSystem = {}
+local HMAC_SECRET = "BNT_HMAC_SECRET_2026_v10_keep_this_safe"
+local API_URL = "https://cnc-web.online/verify_key.php"
+local SESSION_FILE = "/storage/emulated/0/Documents/BNT_LUA_TOOL/.license_session"
+
+-- ============================================================================
+-- HELPER: MD5 HASH (Pure Lua)
+-- ============================================================================
+local function md5(input)
+    local function bitop(a, b, op)
+        local result, bit = 0, 1
+        while a > 0 or b > 0 do
+            local a_bit, b_bit = a % 2, b % 2
+            if op == "and" then
+                if a_bit == 1 and b_bit == 1 then result = result + bit end
+            elseif op == "xor" then
+                if a_bit ~= b_bit then result = result + bit end
+            end
+            a, b, bit = math.floor(a / 2), math.floor(b / 2), bit * 2
+        end
+        return result
+    end
+    
+    local function rol(v, n)
+        local mask = 0xFFFFFFFF
+        v = v % (mask + 1)
+        return ((v * 2^n) % (mask + 1)) + math.floor(v / 2^(32-n))
+    end
+    
+    local K = {
+        0xd76aa478,0xe8c7b756,0x242070db,0xc1bdceee,0xf57c0faf,0x4787c62a,0xa8304613,0xfd469501,
+        0x698098d8,0x8b44f7af,0xffff5bb1,0x895cd7be,0x6b901122,0xfd987193,0xa679438e,0x49b40821,
+        0xf61e2562,0xc040b340,0x265e5a51,0xe9b6c7aa,0xd62f105d,0x02441453,0xd8a1e681,0xe7d3fbc8,
+        0x21e1cde6,0xc33707d6,0xf4d50d87,0x455a14ed,0xa9e3e905,0xfcefa3f8,0x676f02d9,0x8d2a4c8a,
+        0xfffa3942,0x8771f681,0x6d9d6122,0xfde5380c,0xa4beea44,0x4bdecfa9,0xf6bb4b60,0xbebfbc70,
+        0x289b7ec6,0xeaa127fa,0xd4ef3085,0x04881d05,0xd9d4d039,0xe6db99e5,0x1fa27cf8,0xc4ac5665,
+        0xf4292244,0x432aff97,0xab9423a7,0xfc93a039,0x655b59c3,0x8f0ccc92,0xffeff47d,0x85845dd1,
+        0x6fa87e4f,0xfe2ce6e0,0xa3014314,0x4e0811a1,0xf7537e82,0xbd3af235,0x2ad7d2bb,0xeb86d391
+    }
+    local SHIFT = {7,12,17,22,5,9,14,20,4,11,16,23,6,10,15,21}
+    
+    local size = #input
+    local message = input .. string.char(128) .. string.rep(string.char(0), (55 - size) % 64)
+    -- Add length in bits (little endian)
+    local bit_len = size * 8
+    for i = 1, 8 do
+        message = message .. string.char(math.floor(bit_len / 2^((i-1)*8)) % 256)
+    end
+    
+    local h0, h1, h2, h3 = 0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476
+    
+    for i = 1, #message, 64 do
+        local chunk = message:sub(i, i + 63)
+        local w = {}
+        for j = 0, 15 do
+            local a, b, c, d = chunk:byte(j*4+1, j*4+4)
+            w[j] = a + b*256 + c*65536 + d*16777216
+        end
+        
+        local a, b, c, d = h0, h1, h2, h3
+        
+        for j = 0, 63 do
+            local f, g
+            if j < 16 then
+                f = bitop(b, c, "and") + bitop(bitop(b, 0xFFFFFFFF, "xor") or 0, d, "and")
+                g = j
+            elseif j < 32 then
+                f = bitop(d, b, "and") + bitop(bitop(d, 0xFFFFFFFF, "xor") or 0, c, "and")
+                g = (5*j + 1) % 16
+            elseif j < 48 then
+                f = bitop(bitop(b, c, "xor") or 0, d, "xor")
+                g = (3*j + 5) % 16
+            else
+                f = bitop(c, bitop(b, 0xFFFFFFFF, "xor") or 0, "xor")
+                g = (7*j) % 16
+            end
+            
+            local temp = d
+            d = c
+            c = b
+            local sum = (a + f + K[j+1] + w[g]) % 0x100000000
+            b = (b + rol(sum, SHIFT[(j % 4) + 1 + (math.floor(j/16) * 4)])) % 0x100000000
+            a = temp
+        end
+        
+        h0 = (h0 + a) % 0x100000000
+        h1 = (h1 + b) % 0x100000000
+        h2 = (h2 + c) % 0x100000000
+        h3 = (h3 + d) % 0x100000000
+    end
+    
+    local function to_hex(n)
+        local hex = ""
+        for i = 1, 4 do
+            hex = hex .. string.format("%02x", n % 256)
+            n = math.floor(n / 256)
+        end
+        return hex
+    end
+    
+    return to_hex(h0) .. to_hex(h1) .. to_hex(h2) .. to_hex(h3)
+end
+
+-- ============================================================================
+-- HELPER: HMAC-SHA256 (Pure Lua)
+-- ============================================================================
+local function sha256(input)
+    local function bitop(a, b, op)
+        local result, bit = 0, 1
+        while a > 0 or b > 0 do
+            local a_bit, b_bit = a % 2, b % 2
+            if op == "and" then
+                if a_bit == 1 and b_bit == 1 then result = result + bit end
+            elseif op == "xor" then
+                if a_bit ~= b_bit then result = result + bit end
+            end
+            a, b, bit = math.floor(a / 2), math.floor(b / 2), bit * 2
+        end
+        return result
+    end
+    
+    local function ror(v, n)
+        return math.floor(v / 2^n) + (v % 2^n) * 2^(32-n)
+    end
+    
+    local K = {
+        0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+        0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+        0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+        0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+        0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+        0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+        0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+        0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+    }
+    
+    local h0, h1, h2, h3, h4, h5, h6, h7 = 
+        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+    
+    local size = #input
+    local message = input .. string.char(128) .. string.rep(string.char(0), (55 - size) % 64)
+    local bit_len = size * 8
+    for i = 1, 8 do
+        message = message .. string.char(math.floor(bit_len / 2^((i-1)*8)) % 256)
+    end
+    
+    for i = 1, #message, 64 do
+        local chunk = message:sub(i, i + 63)
+        local w = {}
+        for j = 0, 15 do
+            local a, b, c, d = chunk:byte(j*4+1, j*4+4)
+            w[j] = a + b*256 + c*65536 + d*16777216
+        end
+        for j = 16, 63 do
+            local s0 = bitop(ror(w[j-15], 7), ror(w[j-15], 18), "xor")
+            s0 = bitop(s0, math.floor(w[j-15] / 2^3), "xor")
+            local s1 = bitop(ror(w[j-2], 17), ror(w[j-2], 19), "xor")
+            s1 = bitop(s1, math.floor(w[j-2] / 2^10), "xor")
+            w[j] = (w[j-16] + s0 + w[j-7] + s1) % 0x100000000
+        end
+        
+        local a, b, c, d, e, f, g, h = h0, h1, h2, h3, h4, h5, h6, h7
+        
+        for j = 0, 63 do
+            local S1 = bitop(ror(e, 6), ror(e, 11), "xor")
+            S1 = bitop(S1, ror(e, 25), "xor")
+            local ch = bitop(e, f, "and") + bitop(bitop(e, 0xFFFFFFFF, "xor") or 0, g, "and")
+            local temp1 = (h + S1 + ch + K[j+1] + w[j]) % 0x100000000
+            local S0 = bitop(ror(a, 2), ror(a, 13), "xor")
+            S0 = bitop(S0, ror(a, 22), "xor")
+            local maj = bitop(a, b, "and") + bitop(a, c, "and") + bitop(b, c, "and")
+            local temp2 = (S0 + maj) % 0x100000000
+            
+            h = g
+            g = f
+            f = e
+            e = (d + temp1) % 0x100000000
+            d = c
+            c = b
+            b = a
+            a = (temp1 + temp2) % 0x100000000
+        end
+        
+        h0 = (h0 + a) % 0x100000000
+        h1 = (h1 + b) % 0x100000000
+        h2 = (h2 + c) % 0x100000000
+        h3 = (h3 + d) % 0x100000000
+        h4 = (h4 + e) % 0x100000000
+        h5 = (h5 + f) % 0x100000000
+        h6 = (h6 + g) % 0x100000000
+        h7 = (h7 + h) % 0x100000000
+    end
+    
+    local function to_hex(n)
+        local hex = ""
+        for i = 1, 4 do
+            hex = hex .. string.format("%02x", n % 256)
+            n = math.floor(n / 256)
+        end
+        return hex
+    end
+    
+    return to_hex(h0) .. to_hex(h1) .. to_hex(h2) .. to_hex(h3) ..
+           to_hex(h4) .. to_hex(h5) .. to_hex(h6) .. to_hex(h7)
+end
+
+local function hmac_sha256(key, message)
+    local block_size = 64
+    if #key > block_size then
+        key = sha256(key)
+    end
+    key = key .. string.rep(string.char(0), block_size - #key)
+    
+    local o_key_pad = ""
+    local i_key_pad = ""
+    for i = 1, block_size do
+        local byte = key:byte(i)
+        o_key_pad = o_key_pad .. string.char(bitop(byte, 0x5c, "xor"))
+        i_key_pad = i_key_pad .. string.char(bitop(byte, 0x36, "xor"))
+    end
+    
+    return sha256(o_key_pad .. sha256(i_key_pad .. message))
+end
+
+-- ============================================================================
+-- HELPER: URL ENCODE
+-- ============================================================================
+local function url_encode(str)
+    return (str:gsub("([^%w%-%._~ ])", function(c)
+        return string.format("%%%02X", string.byte(c))
+    end):gsub(" ", "+"))
+end
+
+-- ============================================================================
+-- HELPER: BASE64 ENCODE/DECODE
+-- ============================================================================
+local b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+local function base64_encode(data)
+    return ((data:gsub('.', function(x)
+        local r, b = '', x:byte()
+        for i = 8, 1, -1 do r = r .. (b % 2^i - b % 2^(i-1) > 0 and '1' or '0') end
+        return r
+    end) .. '0000'):gsub('%d%d%d?%d?%d?%d?', function(x)
+        if #x < 6 then return '' end
+        local c = 0
+        for i = 1, 6 do c = c + (x:sub(i, i) == '1' and 2^(6-i) or 0) end
+        return b64chars:sub(c + 1, c + 1)
+    end) .. ({ '', '==', '=' })[#data % 3 + 1])
+end
+
+local function base64_decode(data)
+    data = data:gsub('[^' .. b64chars .. '=]', '')
+    return (data:gsub('.', function(x)
+        if x == '=' then return '' end
+        local r, f = '', (b64chars:find(x) - 1)
+        for i = 6, 1, -1 do r = r .. (f % 2^i - f % 2^(i-1) > 0 and '1' or '0') end
+        return r
+    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
+        if #x ~= 8 then return '' end
+        local c = 0
+        for i = 1, 8 do c = c + (x:sub(i, i) == '1' and 2^(8-i) or 0) end
+        return string.char(c)
+    end))
+end
+
+-- ============================================================================
+-- DEVICE ID GENERATOR
+-- ============================================================================
+local function get_device_id()
+    local parts = {}
+    
+    -- Try Android ID
+    pcall(function()
+        local handle = io.popen("settings get secure android_id 2>/dev/null")
+        if handle then
+            local result = handle:read("*a")
+            handle:close()
+            if result and result ~= "null" and #result > 3 then
+                table.insert(parts, "AID:" .. result:gsub("%s", ""))
+            end
+        end
+    end)
+    
+    -- Try Serial Number
+    pcall(function()
+        local handle = io.popen("getprop ro.serialno 2>/dev/null")
+        if handle then
+            local result = handle:read("*a")
+            handle:close()
+            if result and result ~= "unknown" and #result > 2 then
+                table.insert(parts, "SER:" .. result:gsub("%s", ""))
+            end
+        end
+    end)
+    
+    -- Try Build Fingerprint
+    pcall(function()
+        local handle = io.popen("getprop ro.build.fingerprint 2>/dev/null")
+        if handle then
+            local result = handle:read("*a")
+            handle:close()
+            if result and #result > 3 then
+                table.insert(parts, "FP:" .. result:gsub("%s", ""))
+            end
+        end
+    end)
+    
+    -- Try Board Platform
+    pcall(function()
+        local handle = io.popen("getprop ro.board.platform 2>/dev/null")
+        if handle then
+            local result = handle:read("*a")
+            handle:close()
+            if result and #result > 1 then
+                table.insert(parts, "BRD:" .. result:gsub("%s", ""))
+            end
+        end
+    end)
+    
+    if #parts == 0 then
+        -- Fallback: use os.time() + random
+        parts = { "FALLBACK:" .. tostring(os.time()) .. "_" .. tostring(math.random(100000, 999999)) }
+    end
+    
+    return sha256(table.concat(parts, "|")):sub(1, 32)
+end
+
+-- ============================================================================
+-- SESSION MANAGEMENT
+-- ============================================================================
+local function save_session(key, expires_at, device_id)
+    pcall(function()
+        local data = "KEY:" .. base64_encode(key) .. "\n" ..
+                     "EXPIRES:" .. tostring(expires_at) .. "\n" ..
+                     "DEVICE:" .. device_id .. "\n" ..
+                     "TIME:" .. tostring(os.time())
+        local file = io.open(SESSION_FILE, "w")
+        if file then
+            file:write(data)
+            file:close()
+            return true
+        end
+    end)
+    return false
+end
+
+local function load_session()
+    pcall(function()
+        local file = io.open(SESSION_FILE, "r")
+        if file then
+            local content = file:read("*a")
+            file:close()
+            
+            local key = content:match("KEY:([^\n]+)")
+            local expires = content:match("EXPIRES:([^\n]+)")
+            local device = content:match("DEVICE:([^\n]+)")
+            
+            if key then
+                key = base64_decode(key)
+            end
+            
+            return {
+                key = key,
+                expires_at = tonumber(expires) or 0,
+                device_id = device
+            }
+        end
+    end)
+    return nil
+end
+
+local function clear_session()
+    pcall(function()
+        os.remove(SESSION_FILE)
+    end)
+end
+
+-- ============================================================================
+-- HTTP REQUEST (Using game's HTTP manager)
+-- ============================================================================
+local function http_post(url, headers, body, callback)
+    pcall(function()
+        local http = ModuleManager and ModuleManager.GetModule(ModuleManager.CommonModuleConfig.http_manager)
+        if http and http.Post then
+            http:Post(url, headers, body, nil, callback, 15)
+            return true
+        end
+    end)
+    
+    -- Fallback: Use slua http if available
+    pcall(function()
+        local HttpRequest = import("HttpRequest")
+        if HttpRequest then
+            -- Fallback implementation
+        end
+    end)
+    
+    return false
+end
+
+-- ============================================================================
+-- LICENSE VERIFICATION
+-- ============================================================================
+local function verify_license(key, device_id, callback)
+    local timestamp = tostring(os.time())
+    local payload_data = key .. "|" .. device_id .. "|" .. timestamp
+    local signature = hmac_sha256(HMAC_SECRET, payload_data)
+    
+    local body = "key=" .. url_encode(key) ..
+                 "&device_id=" .. url_encode(device_id) ..
+                 "&timestamp=" .. url_encode(timestamp) ..
+                 "&signature=" .. url_encode(signature) ..
+                 "&tool_version=v10.6"
+    
+    local headers = {
+        ["Content-Type"] = "application/x-www-form-urlencoded",
+        ["User-Agent"] = "BNT-Lua-Tool/v10.6"
+    }
+    
+    http_post(API_URL, headers, body, function(response)
+        local success = false
+        local expires_at = nil
+        local error_msg = "Unknown error"
+        
+        pcall(function()
+            -- Parse JSON response (simple parser)
+            local status = response:match('"status"%s*:%s*"([^"]+)"')
+            local message = response:match('"message"%s*:%s*"([^"]+)"')
+            local expires = response:match('"expires_at"%s*:%s*"([^"]+)"')
+            
+            if status == "success" then
+                success = true
+                expires_at = expires or "N/A"
+            else
+                error_msg = message or "Invalid key"
+            end
+        end)
+        
+        callback(success, expires_at, error_msg)
+    end)
+end
+
+-- ============================================================================
+-- MAIN LICENSE CHECK FUNCTION
+-- ============================================================================
+local function CheckLicense()
+    local device_id = get_device_id()
+    print("[License] Device ID: " .. device_id:sub(1, 16) .. "...")
+    
+    -- 1. Check session
+    local session = load_session()
+    if session and session.device_id == device_id then
+        -- Check if expired (if expires_at is a timestamp)
+        local expiry_time = tonumber(session.expires_at)
+        if expiry_time and expiry_time > 0 and os.time() > expiry_time then
+            print("[License] Session expired")
+            clear_session()
+        else
+            print("[License] Session restored: " .. (session.key or "unknown"))
+            return true, session.key
+        end
+    end
+    
+    -- 2. Need new key
+    print("[License] Please enter your license key:")
+    local key = nil
+    pcall(function()
+        key = io.read("*l")
+    end)
+    
+    if not key or key == "" then
+        print("[License] No key provided")
+        return false, nil
+    end
+    
+    key = key:gsub("^%s+", ""):gsub("%s+$", ""):upper()
+    
+    if #key < 8 then
+        print("[License] Key too short")
+        return false, nil
+    end
+    
+    -- 3. Verify with server
+    print("[License] Verifying with server...")
+    local verified = false
+    local final_key = nil
+    
+    verify_license(key, device_id, function(success, expires_at, error_msg)
+        if success then
+            print("[License] ✅ Verified successfully!")
+            print("[License] Expires: " .. expires_at)
+            save_session(key, expires_at, device_id)
+            verified = true
+            final_key = key
+        else
+            print("[License] ❌ Verification failed: " .. error_msg)
+        end
+    end)
+    
+    -- Wait for callback
+    local timeout = os.time() + 15
+    while not verified and os.time() < timeout do
+        -- Busy wait
+    end
+    
+    return verified, final_key
+end
+
+-- ============================================================================
+-- AUTO-CHECK ON LOAD
+-- ============================================================================
+_G.LicenseSystem = LicenseSystem
+_G.CheckLicense = CheckLicense
+_G.GetLicenseDeviceID = get_device_id
+_G.ClearLicenseSession = clear_session
+
+-- Auto-check if in Client mode
+if Client then
+    local ok, licensed = pcall(CheckLicense)
+    if not ok or not licensed then
+        print("[License] ⚠ Not licensed! Some features may be disabled.")
+    end
+end
+
+return LicenseSystem
+
+local function ShowBNTMODVIPMenu() 
+    if _G.BNTMODMenuAlreadyShown then return end
+    if _G.BNTMODState.MenuStep ~= 0 then return end
+    pcall(function()
+        local Msg = require("client.slua.logic.common.logic_common_msg_box")
+        if not Msg or not Msg.Show then return end
+        local function Step_ScamAlert()
+            Msg.Show(1, "4.7 RESELLER ACCEPT", "DON'T PLAY LIKE A CHEATER \nAVOID FROM REPORT!!\n\nNO FEEDBACK - NO SECURE UPDATE", function() local Web = require("client.slua.logic.url.logic_webview_sdk"); if Web and Web.OpenURL then Web:OpenURL("https://t.me/POLO_OWNERl") end end, function() end, "JOIN", "CLOSE")
+            _G.BNTMODState.MenuStep = 99
+            _G.BNTMODMenuAlreadyShown = true
+        end
+        local function Step_Welcome()
+            Msg.Show(1, "4.7 RESELLER ACCEPT", "ACTIVATION SUCCESSFUL!\n\nBEWARE OF THE SCAMMER CHECK THE USERNAME.\nTHE REAL OWNER IS @POLO_OWNERl",
+            function() _G.InitModMenuTab(); Notify("VIP MOD MENU BY @POLO_OWNERl to toggle features!"); Step_ScamAlert() end, 
+            function() end, "OK", "CLOSE")
+        end
+        _G.BNTMODState.MenuStep = 1
+        Step_Welcome() 
+    end)
+end
+
+local function InitializeGraphicsUnlock() 
+    if isExpired then return end
+    if _G.BNTMODState.GraphicsUnlocked or currentTime > limitTime then return end
+    pcall(function()
+        local SettingCfg = require("client.logic.setting.setting_config")
+        local GraphicSettingDB = require("client.slua.umg.NewSetting.GraphicsNew.GraphicSettingDB")
+        if SettingCfg then
+            if SettingCfg.TpViewValue then SettingCfg.TpViewValue.max = 160 end
+            if SettingCfg.FpViewValue then SettingCfg.FpViewValue.max = 160 end
+        end
+        if GraphicSettingDB then
+            if GraphicSettingDB.TpViewValue then GraphicSettingDB.TpViewValue.max = 160 end
+        end
+    end)
+    pcall(function()
+        local logic_setting_graphics = require("client.slua.logic.setting.logic_setting_graphics")
+        local GSC_FPS = require("client.slua.umg.NewSetting.GraphicsNew.Comps.GSC_FPS")
+        local GraphicSettingDB = require("client.slua.umg.NewSetting.GraphicsNew.GraphicSettingDB")
+        if logic_setting_graphics then
+            local old_SetFPS = logic_setting_graphics.SetFPS
+            function logic_setting_graphics.SetFPS(gameInstance, FPSLevel)
+                if old_SetFPS then old_SetFPS(gameInstance, FPSLevel) end
+                if FPSLevel == 8 then 
+                    gameInstance:ExecuteCMD("t.MaxFPS", "165")
+                    gameInstance:ExecuteCMD("r.FrameRateLimit", "165")
+                end
+            end
+        end
+        if GSC_FPS and GSC_FPS.__inner_impl then
+            local fps_impl = GSC_FPS.__inner_impl
+            function fps_impl:GetMaxFPSLevel() return 8, 8 end
+            function fps_impl:InitRealSupportFPS()
+                local RealSupportFPS = {}
+                for i = 1, 8 do RealSupportFPS[i] = {true, true} end
+                if GraphicSettingDB then GraphicSettingDB:UpdateUIData(GraphicSettingDB.RealSupportFPS, RealSupportFPS, false) end
+                return RealSupportFPS
+            end
+        end
+    end)
+    _G.BNTMODState.GraphicsUnlocked = true
+    Notify("Graphics & FPS 165Hz Unlocked")
+end
+
+local function InitializeNativeESP() 
+    if _G.BNTMODState.NativeESPReady then return end
+    pcall(function() 
+        local GamePlayTools = require("GameLua.Mod.BaseMod.Common.GamePlayTools") 
+        local currentMarkCfg = GamePlayTools.GetCurrentConfig("ScreenMarkConfig") 
+        local function ApplyCfg(cfg)
+            if not cfg then return end 
+            if cfg[1006] then 
+                cfg[1006].bBindBlocked = true; cfg[1006].bBindOutScreen = true; 
+                cfg[1006].MaxWidgetNum = 99; cfg[1006].MaxShowDistance = 6000000; 
+                cfg[1006].bScaleByDistance = false; cfg[1006].BindSocketName = "root"; 
+                cfg[1006].bUseLuaWorldSocketName = true; cfg[1006].WorldPositionOffset = FVector(0, 0, -30) 
+            end 
+            cfg[8888] = { 
+                UIPathName = "/Game/Mod/EvoBase/BluePrints/UIBP/QuickSign/QuickSign_TipHitEnemy_UIBP_New.QuickSign_TipHitEnemy_UIBP_New_C",
+                MaxWidgetNum = 99, MaxShowDistance = 6000000, bBindOutScreen = true, bBindBlocked = true, 
+                bIsBindingActor = true, BindSocketName = "head", bUseLuaWorldSocketName = true, 
+                WorldPositionOffset = FVector(0, 0, 30), bNeedPreLoad = true, Priority = 2 
+            } 
+            cfg[9999] = { 
+                UIPathName = "/Game/Mod/EvoBase/BluePrints/UIBP/QuickSign/QuickSign_TipHitEnemy_UIBP_New.QuickSign_TipHitEnemy_UIBP_New_C",
+                MaxWidgetNum = 99, MaxShowDistance = 6000000, bBindOutScreen = true, bBindBlocked = true, 
+                bIsBindingActor = true, BindSocketName = "head", bUseLuaWorldSocketName = true, 
+                WorldPositionOffset = FVector(0, 0, 50), bNeedPreLoad = true, Priority = 2 
+            } 
+        end 
+        ApplyCfg(currentMarkCfg) 
+        for k, cfg in pairs(package.loaded) do 
+            if type(k) == "string" and string.find(k, "ScreenMarkConfig") and type(cfg) == "table" then ApplyCfg(cfg) end 
+        end 
+    end)
+    _G.BNTMODState.NativeESPReady = true 
+    Notify("Native ESP System Initialized") 
+end
+
+local function GetAllSkeletalMeshes(enemy, markData)
+    local curTime = os.clock()
+    if markData and markData.CachedMeshes and markData.CachedMeshTime and (curTime - markData.CachedMeshTime) < MESH_CACHE_TIME then
+        local validMeshes = {}
+        for _, cachedMesh in ipairs(markData.CachedMeshes) do
+            if Valid(cachedMesh) then table.insert(validMeshes, cachedMesh) end
+        end
+        markData.CachedMeshes = validMeshes
+        return validMeshes
+    end
+    local meshes = {}
+    if Valid(enemy.Mesh) then table.insert(meshes, enemy.Mesh) end
+    pcall(function()
+        local SkeletalMeshClass = import("SkeletalMeshComponent")
+        if SkeletalMeshClass and type(enemy.GetComponentsByClass) == "function" then
+            local childs = enemy:GetComponentsByClass(SkeletalMeshClass)
+            if childs then
+                local count = type(childs.Num) == "function" and childs:Num() or #childs
+                for i = 1, count do
+                    local comp = type(childs.Get) == "function" and childs:Get(i-1) or childs[i]
+                    if Valid(comp) and comp ~= enemy.Mesh then table.insert(meshes, comp) end
+                end
+            end
+        end
+    end)
+    if markData then
+        markData.CachedMeshes = meshes
+        markData.CachedMeshTime = curTime
+    end
+    return meshes
+end
+
+-- ========================================== 
+-- COLOR BODY NEW (Wall & Color Purple/Yellow)
+-- ========================================== 
+local function ApplyColorBodyNew(enemy, markData)
+    pcall(function()
+        -- Kích hoạt Console Command nếu chưa bật (Chỉ gọi 1 lần)
+        if not _G.ConsoleNewWallReady then
+            local KismetSystemLibrary = import("KismetSystemLibrary")
+            local world = slua.getWorld()
+            if KismetSystemLibrary and world then
+                KismetSystemLibrary.ExecuteConsoleCommand(world, "r.EnableDrawDyeingColor 1")
+                KismetSystemLibrary.ExecuteConsoleCommand(world, "r.CustomDepth 3")
+                KismetSystemLibrary.ExecuteConsoleCommand(world, "r.IdeaOutline.Enable 1")
+                KismetSystemLibrary.ExecuteConsoleCommand(world, "r.Highlight.Enable 1")
+                _G.ConsoleNewWallReady = true
+            end
+        end
+
+        -- Lấy toàn bộ Mesh của kẻ địch
+        local meshes = GetAllSkeletalMeshes(enemy, markData)
+        
+        -- Thêm lưới của vũ khí đang cầm trên tay
+        local weapon = nil
+        pcall(function() weapon = enemy:GetCurrentWeapon() end)
+        if slua.isValid(weapon) and slua.isValid(weapon.Mesh) then
+            table.insert(meshes, weapon.Mesh)
+        end
+
+        local isBot = markData.AK_IS_BOT or false
+        local currentMeshCount = #meshes
+        
+        -- [TỐI ƯU FPS TUYỆT ĐỐI] - CHẾ ĐỘ NGỦ ĐÔNG (CACHE)
+        -- Tạo mã băm nhận diện: Nếu số lượng quần áo/súng của địch không đổi, bỏ qua vòng lặp C++ cực nặng bên dưới
+        local stateHash = (isBot and "BOT" or "PLAYER") .. "_" .. tostring(currentMeshCount)
+        
+        if markData.LastColorNewHash == stateHash and markData.ColorNewApplied then
+            return -- Mọi thứ đã được tô màu trước đó, ngắt hàm tại đây để tránh đốt CPU!
+        end
+        
+        -- Nếu có sự thay đổi (mới bật, địch đổi súng, lụm đồ), tiến hành cập nhật màu và lưu Cache
+        markData.LastColorNewHash = stateHash
+        markData.ColorNewApplied = true
+
+        -- Chỉ Load bộ màu khi thực sự cần xử lý
+        local LinearColorClass = import("LinearColor") or _G.FLinearColor
+        local c_vis = LinearColorClass and LinearColorClass(0, 100, 0, 1) or {R=0, G=100, B=0, A=1}
+        local c_occ = LinearColorClass and LinearColorClass(100, 0, 0, 1) or {R=100, G=0, B=0, A=1}
+        local c_bVis = LinearColorClass and LinearColorClass(49, 48, 0, 100) or {R=49, G=48, B=0, A=100}
+        local c_bOcc = LinearColorClass and LinearColorClass(9, 1.5, 45, 100) or {R=9, G=1.5, B=45, A=100}
+
+        local visColor = isBot and c_bVis or c_vis
+        local occColor = isBot and c_bOcc or c_occ
+
+        for _, mesh in ipairs(meshes) do
+            if Valid(mesh) then
+                pcall(function()
+                    if type(mesh.SetDrawDyeing) == "function" then
+                        mesh:SetDrawDyeing(true)
+                        mesh:SetDrawDyeingMode(1)
+                        mesh:SetVisibleDyeingColor(visColor)
+                        mesh:SetOccludedDyeingColor(occColor)
+                        mesh:SetDyeingColorFadeDistance(99999.0)
+                        mesh:SetDyeingColorMinMaxDistance(0.0, 99999.0)
+                        mesh:SetDrawHighlight(true)
+                        mesh:OverrideHighlightColor(visColor)
+                        mesh:SetHighlightCanBeOccluded(false)
+                        mesh:SetDrawIdeaOutline(true)
+                        mesh:SetIdeaOutlineNew(true)
+                        mesh:SetIdeaOutlineOcclusionHighlight(true)
+                        mesh:OverrideIdeaOutlineColor(visColor)
+                        mesh:SetIdeaOutlineOcclusionColor(occColor)
+                        mesh:OverrideIdeaOutlineThickness(20.0)
+                        mesh:SetIdeaOverrideOutlineAndOcclusion(true)
+                        mesh:SetRenderCustomDepth(true)
+                        mesh:SetCustomDepthStencilValue(255)
+                    end
+                end)
+            end
+        end
+    end)
+end
+
+local function UndoColorBodyNew(enemy, markData)
+    pcall(function()
+        if markData.ColorNewApplied then
+            local meshes = GetAllSkeletalMeshes(enemy, markData)
+            local weapon = nil
+            pcall(function() weapon = enemy:GetCurrentWeapon() end)
+            if slua.isValid(weapon) and slua.isValid(weapon.Mesh) then
+                table.insert(meshes, weapon.Mesh)
+            end
+
+            for _, mesh in ipairs(meshes) do
+                if Valid(mesh) then
+                    pcall(function()
+                        if type(mesh.SetDrawDyeing) == "function" then
+                            mesh:SetDrawDyeing(false)
+                            mesh:SetDrawHighlight(false)
+                            mesh:SetDrawIdeaOutline(false)
+                            mesh:SetRenderCustomDepth(false)
+                        end
+                    end)
+                end
+            end
+            markData.ColorNewApplied = false
+            markData.LastColorNewHash = "" -- Xóa Cache để lần sau bật lại sẽ tính toán lại mượt mà
+        end
+    end)
+end
+
+
+-- ========================================== 
+-- AIMBOT SYSTEM
+-- ========================================== 
+_G.GetEnemyTargetsFromActors = function(radius)
+    local result = {}
+    local player = GameplayData.GetPlayerCharacter()
+    if not slua.isValid(player) then return result end
+    local allCharacters = {}
+    if GameplayData.GetAllPlayerCharacters then
+        allCharacters = GameplayData.GetAllPlayerCharacters()
+    elseif GameplayData.GameCharacters then
+        for _, char in pairs(GameplayData.GameCharacters) do table.insert(allCharacters, char) end
+    end
+    local myTeam = player:GetTeamID()
+    for _, actor in pairs(allCharacters) do
+        if slua.isValid(actor) and actor ~= player and actor.GetTeamID and actor:IsAlive() then
+            if actor:GetTeamID() ~= myTeam then
+                local dist = player:GetDistanceTo(actor)
+                if dist <= radius then table.insert(result, actor) end
+            end
+        end
+    end
+    return result
+end
+
+_G.AimTouch = function()
+    pcall(function()
+        if not _G.BNTMODConfig.AimTouchEnable then return end
+        local player = GameplayData.GetPlayerCharacter()
+        if not slua.isValid(player) then return end
+        local pc = player:GetPlayerControllerSafety()
+        if not slua.isValid(pc) then return end
+        local isFiring = player.bIsWeaponFiring
+        local isADS = player.bIsGunADS
+        local weapon = player.WeaponManagerComponent and player.WeaponManagerComponent.CurrentWeaponReplicated
+        if not weapon and type(player.GetCurrentShootWeapon) == "function" then weapon = player:GetCurrentShootWeapon() end
+        
+        local isShotgun = false
+        local isSniper = false
+        local currentAmmo = 1
+        
+        if slua.isValid(weapon) then
+            local wID = type(weapon.GetWeaponID) == "function" and weapon:GetWeaponID() or 0
+            local wName = type(weapon.GetWeaponName) == "function" and weapon:GetWeaponName() or ""
+            if (wID >= 1030000 and wID < 1040000) or wName:find("S686") or wName:find("S1897") or wName:find("S12") or wName:find("DBS") or wName:find("M1014") then isShotgun = true end
+            if wName:find("Kar98") or wName:find("M24") or wName:find("AWM") or wName:find("Mosin") or wName:find("Win94") or wName:find("AMR") or wName:find("SKS") or wName:find("SLR") or wName:find("Mini") or wName:find("Mk14") or wName:find("QBU") or wName:find("Mk12") or wName:find("VSS") then isSniper = true end
+            if type(weapon.GetCurrentAmmo) == "function" then currentAmmo = weapon:GetCurrentAmmo()
+            elseif weapon.ShootWeaponComponent and type(weapon.ShootWeaponComponent.GetCurrentAmmo) == "function" then currentAmmo = weapon.ShootWeaponComponent:GetCurrentAmmo()
+            elseif weapon.CurrentAmmo ~= nil then currentAmmo = weapon.CurrentAmmo end
+        end
+
+        if _G.BNTMODState.IsAutoFiring then
             pcall(function()
-                local lpc = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
-                if slua.isValid(lpc) and lpc.HiggsBosonComponent then
-                    lpc.HiggsBosonComponent.bMHActive = false
+                player.bIsWeaponFiring = false
+                if type(player.SetIsWeaponFiring) == "function" then player:SetIsWeaponFiring(false) end
+                if slua.isValid(pc) and type(pc.SetIsWeaponFiring) == "function" then pc:SetIsWeaponFiring(false) end
+                local wepMgr = player.WeaponManagerComponent
+                if slua.isValid(wepMgr) then wepMgr.bIsWeaponFiring = false end
+            end)
+            _G.BNTMODState.IsAutoFiring = false
+        end
+
+        if isShotgun and currentAmmo <= 0 then return end
+
+        local cond = 2
+        local prioMode = 1
+        local boneIdx = 1
+        local speedVal = 50
+        local fovVal = 30
+        local maxDistMeters = 50
+        local useVisCheck = false
+        local igKnock = false
+        local igBot = false
+        local predVal = 0 
+        local recoilCompVal = 0 
+
+        if isShotgun and _G.BNTMODConfig.AimTouchSG then
+            cond = _G.BNTMODState.CustomTextData.AimTouchSGCond or 1
+            if _G.BNTMODConfig.AimTouchSGAutoFire then cond = 2 end
+            if cond == 1 and not isFiring then return end
+            prioMode = _G.BNTMODState.CustomTextData.AimTouchSGPrio or 1
+            boneIdx = _G.BNTMODState.CustomTextData.AimTouchSGBone or 2
+            speedVal = _G.BNTMODState.CustomTextData.AimTouchSGSpeed or 80
+            fovVal = _G.BNTMODState.CustomTextData.AimTouchSGFOV or 40
+            maxDistMeters = _G.BNTMODState.CustomTextData.AimTouchSGDist or 30
+            useVisCheck = _G.BNTMODConfig.AimTouchSGVisCheck
+            igKnock = _G.BNTMODConfig.AimTouchSGIgKnock
+            igBot = _G.BNTMODConfig.AimTouchSGIgBot
+        elseif isADS then
+            if isSniper and _G.BNTMODConfig.AimTouchScopeSniper then
+                cond = _G.BNTMODState.CustomTextData.AimTouchSniperCond or 2
+                if cond == 1 and not isFiring then return end
+                prioMode = _G.BNTMODState.CustomTextData.AimTouchSniperPrio or 1
+                boneIdx = _G.BNTMODState.CustomTextData.AimTouchSniperBone or 1
+                speedVal = _G.BNTMODState.CustomTextData.AimTouchSniperSpeed or 30
+                fovVal = _G.BNTMODState.CustomTextData.AimTouchSniperFOV or 20
+                maxDistMeters = _G.BNTMODState.CustomTextData.AimTouchSniperDist or 400
+                useVisCheck = _G.BNTMODConfig.AimTouchSniperVisCheck
+                igKnock = _G.BNTMODConfig.AimTouchSniperIgKnock
+                igBot = _G.BNTMODConfig.AimTouchSniperIgBot
+                predVal = _G.BNTMODState.CustomTextData.AimTouchSniperPred or 0
+            elseif _G.BNTMODConfig.AimTouchScopeAll then
+                cond = _G.BNTMODState.CustomTextData.AimTouchScopeCond or 1
+                if cond == 1 and not isFiring then return end
+                prioMode = _G.BNTMODState.CustomTextData.AimTouchScopePrio or 1
+                boneIdx = _G.BNTMODState.CustomTextData.AimTouchScopeBone or 2
+                speedVal = _G.BNTMODState.CustomTextData.AimTouchScopeSpeed or 40
+                fovVal = _G.BNTMODState.CustomTextData.AimTouchScopeFOV or 20
+                maxDistMeters = _G.BNTMODState.CustomTextData.AimTouchScopeDist or 300
+                useVisCheck = _G.BNTMODConfig.AimTouchScopeVisCheck
+                igKnock = _G.BNTMODConfig.AimTouchScopeIgKnock
+                igBot = _G.BNTMODConfig.AimTouchScopeIgBot
+                predVal = _G.BNTMODState.CustomTextData.AimTouchScopePred or 0
+                recoilCompVal = _G.BNTMODState.CustomTextData.AimTouchScopeRecoil or 0
+            else return end
+        else
+            if not _G.BNTMODConfig.AimTouchHipfire then return end
+            cond = _G.BNTMODState.CustomTextData.AimTouchHipCond or 1
+            if cond == 1 and not isFiring then return end 
+            prioMode = _G.BNTMODState.CustomTextData.AimTouchHipPrio or 1
+            boneIdx = _G.BNTMODState.CustomTextData.AimTouchHipBone or 1
+            speedVal = _G.BNTMODState.CustomTextData.AimTouchHipSpeed or 50
+            fovVal = _G.BNTMODState.CustomTextData.AimTouchHipFOV or 30
+            maxDistMeters = _G.BNTMODState.CustomTextData.AimTouchHipDist or 250
+            useVisCheck = _G.BNTMODConfig.AimTouchHipVisCheck
+            igKnock = _G.BNTMODConfig.AimTouchHipIgKnock
+            igBot = _G.BNTMODConfig.AimTouchHipIgBot
+        end
+
+        local currentMaxDist = maxDistMeters * 100 
+        local enemies = _G.GetEnemyTargetsFromActors(currentMaxDist)
+        if not enemies or #enemies == 0 then return end
+        
+        local FVector2D = import("Vector2D")
+        local UGameplayStatics = import("GameplayStatics")
+        local KismetMathLibrary = import("KismetMathLibrary")
+        
+        local camManager = UGameplayStatics.GetPlayerCameraManager(pc, 0)
+        if not slua.isValid(camManager) then return end
+        local camLoc = camManager:GetCameraLocation()
+        if not camLoc then return end
+        
+        local ui_util = require("client.common.ui_util")
+        if not ui_util then return end
+        local viewportSize = ui_util.GetViewportSize()
+        if not viewportSize then return end
+        
+        local centerX = viewportSize.X * 0.5
+        local centerY = viewportSize.Y * 0.5
+        local FOV_RADIUS = (fovVal / 100.0) * (viewportSize.X / 2.0)
+        
+        local bestTarget = nil
+        local bestScore = 99999999 
+        
+        local selBoneName = "head"
+        if boneIdx == 1 then selBoneName = "head"
+        elseif boneIdx == 2 then selBoneName = "spine_03"
+        elseif boneIdx == 3 then selBoneName = "spine_01"
+        elseif boneIdx == 4 then selBoneName = "pelvis" end
+
+        for i, target in ipairs(enemies) do
+            if not slua.isValid(target) then goto continue end
+            if igKnock and target.HealthStatus == 1 then goto continue end
+            if igBot then
+                local tIsBot = false
+                if target.bIsAI == true or target.IsAI == true then tIsBot = true end
+                local pState = target.PlayerState
+                if slua.isValid(pState) and (pState.bIsABot or pState.bIsBot) then tIsBot = true end
+                if tIsBot then goto continue end
+            end
+            if useVisCheck then
+                local curTime = os.clock()
+                local tId = type(target.GetUniqueID) == "function" and target:GetUniqueID() or tostring(target)
+                _G.AimTouchVisCache = _G.AimTouchVisCache or {}
+                if not _G.AimTouchVisCache[tId] or (curTime - _G.AimTouchVisCache[tId].time) > 0.3 then
+                    local isHidden = true
+                    pcall(function() if pc:LineOfSightTo(target) then isHidden = false end end)
+                    _G.AimTouchVisCache[tId] = { hidden = isHidden, time = curTime }
+                end
+                if _G.AimTouchVisCache[tId].hidden then goto continue end
+            end
+            local tPos = target:GetBonePos(selBoneName, {X=0, Y=0, Z=0})
+            if not tPos or (tPos.X == 0 and tPos.Y == 0 and tPos.Z == 0) then
+                if type(target.GetSocketLocation) == "function" then tPos = target:GetSocketLocation(selBoneName) end
+            end
+            if not tPos or (tPos.X == 0 and tPos.Y == 0 and tPos.Z == 0) then
+                if type(target.K2_GetActorLocation) == "function" then
+                    tPos = target:K2_GetActorLocation()
+                    if tPos then
+                        if boneIdx == 1 then tPos.Z = tPos.Z + 70
+                        elseif boneIdx == 2 then tPos.Z = tPos.Z + 40
+                        elseif boneIdx == 3 then tPos.Z = tPos.Z + 20 end
+                    end
+                end
+            end
+            if not tPos or (tPos.X == 0 and tPos.Y == 0 and tPos.Z == 0) then goto continue end
+            local screen = FVector2D()
+            local success = pc:ProjectWorldLocationToScreen(tPos, screen, false)
+            if not success or screen.X <= 0 or screen.Y <= 0 then goto continue end
+            local dx = screen.X - centerX
+            local dy = screen.Y - centerY
+            local distScreen = math.sqrt(dx*dx + dy*dy)
+            if distScreen > FOV_RADIUS then goto continue end
+            local currentScore = distScreen
+            if prioMode == 2 then currentScore = player:GetDistanceTo(target)
+            elseif prioMode == 3 then currentScore = target.Health or 100
+            elseif prioMode == 4 then 
+                local hp = target.Health or 100
+                local maxhp = target.HealthMax or 100
+                if maxhp <= 0 then maxhp = 100 end
+                currentScore = hp / maxhp
+            end
+            if currentScore < bestScore then
+                bestScore = currentScore
+                bestTarget = target
+            end
+            ::continue::
+        end
+        
+        if not slua.isValid(bestTarget) then return end
+        
+        local finalBonePos = bestTarget:GetBonePos(selBoneName, {X=0, Y=0, Z=0})
+        if not finalBonePos or (finalBonePos.X == 0 and finalBonePos.Y == 0 and finalBonePos.Z == 0) then
+            if type(bestTarget.GetSocketLocation) == "function" then finalBonePos = bestTarget:GetSocketLocation(selBoneName) end
+        end
+        if not finalBonePos or (finalBonePos.X == 0 and finalBonePos.Y == 0 and finalBonePos.Z == 0) then
+            if type(bestTarget.K2_GetActorLocation) == "function" then
+                finalBonePos = bestTarget:K2_GetActorLocation()
+                if finalBonePos then
+                    if boneIdx == 1 then finalBonePos.Z = finalBonePos.Z + 70
+                    elseif boneIdx == 2 then finalBonePos.Z = finalBonePos.Z + 40
+                    elseif boneIdx == 3 then finalBonePos.Z = finalBonePos.Z + 20 end
+                end
+            end
+        end
+        if not finalBonePos or (finalBonePos.X == 0 and finalBonePos.Y == 0 and finalBonePos.Z == 0) then return end
+        
+        if predVal > 0 then
+            pcall(function()
+                local tVelocity = nil
+                if type(bestTarget.GetVelocity) == "function" then tVelocity = bestTarget:GetVelocity() end
+                if tVelocity and (tVelocity.X ~= 0 or tVelocity.Y ~= 0) then
+                    local distToEnemy = player:GetDistanceTo(bestTarget) / 100.0
+                    local ToF = (distToEnemy / 800.0) * (predVal / 50.0) 
+                    finalBonePos.X = finalBonePos.X + (tVelocity.X * ToF)
+                    finalBonePos.Y = finalBonePos.Y + (tVelocity.Y * ToF)
                 end
             end)
+        end
+
+        local rot = KismetMathLibrary.FindLookAtRotation(camLoc, finalBonePos)
+        if not rot then return end
+        local currentRot = pc:GetControlRotation()
+        if not currentRot then return end
+        local deltaYaw = rot.Yaw - currentRot.Yaw
+        local deltaPitch = rot.Pitch - currentRot.Pitch
+        if isADS then
+            local camRot = nil
+            if type(camManager.GetCameraRotation) == "function" then camRot = camManager:GetCameraRotation() end
+            if camRot then
+                deltaYaw = deltaYaw - (camRot.Yaw - currentRot.Yaw)
+                deltaPitch = deltaPitch - (camRot.Pitch - currentRot.Pitch)
+            end
+        end
+        if deltaYaw > 180 then deltaYaw = deltaYaw - 360 end
+        if deltaYaw < -180 then deltaYaw = deltaYaw + 360 end
+        if deltaPitch > 180 then deltaPitch = deltaPitch - 360 end
+        if deltaPitch < -180 then deltaPitch = deltaPitch + 360 end
+        local smoothFactor = 0.0
+        if speedVal >= 100 then smoothFactor = 1.0
+        else
+            smoothFactor = (speedVal / 100.0) * 0.3
+            if smoothFactor < 0.01 then smoothFactor = 0.01 end
+        end
+        local finalPitch = currentRot.Pitch + (deltaPitch * smoothFactor)
+        local finalYaw = currentRot.Yaw + (deltaYaw * smoothFactor)
+        if recoilCompVal > 0 and isFiring then
+            local pullDownForce = (recoilCompVal / 50.0) * 1.5
+            finalPitch = finalPitch - pullDownForce
+        end
+        local finalRot = { Pitch = finalPitch, Yaw = finalYaw, Roll = 0 }
+        pc:SetControlRotation(finalRot, "AimTouch")
+        
+        if isShotgun and _G.BNTMODConfig.AimTouchSGAutoFire then
+            pcall(function()
+                local distToTarget = player:GetDistanceTo(bestTarget) / 100
+                if distToTarget <= maxDistMeters then
+                    player.bIsWeaponFiring = true
+                    if type(player.SetIsWeaponFiring) == "function" then player:SetIsWeaponFiring(true) end
+                    if slua.isValid(pc) and type(pc.SetIsWeaponFiring) == "function" then pc:SetIsWeaponFiring(true) end
+                    local wepMgr = player.WeaponManagerComponent
+                    if slua.isValid(wepMgr) then wepMgr.bIsWeaponFiring = true end
+                    local currentWep = player:GetCurrentWeapon()
+                    if slua.isValid(currentWep) and type(currentWep.StartFire) == "function" then currentWep:StartFire() end
+                    _G.BNTMODState.IsAutoFiring = true
+                end
+            end)
+        end
+    end)
+end
+
+-- ========================================== 
+-- MAIN LOOP
+-- ========================================== 
+local function MainLoop() 
+    if isExpired then return end
+
+    if _G.BNTMODState.CustomTextData == nil then 
+        _G.BNTMODState.CustomTextData = {OuterSpeed = 10, InnerSpeed = 10, HRecoil = 0.3, VRecoil = 0.3, IpadViewFOV = 120, AimTouchHipPrio = 1, AimTouchHipBone = 1, AimTouchHipCond = 1, AimTouchHipSpeed = 50, AimTouchHipFOV = 30, AimTouchHipDist = 250, AimTouchSGPrio = 1, AimTouchSGBone = 2, AimTouchSGCond = 1, AimTouchSGSpeed = 80, AimTouchSGFOV = 40, AimTouchSGDist = 30, AimTouchScopePrio = 1, AimTouchScopeBone = 2, AimTouchScopeCond = 1, AimTouchScopeSpeed = 40, AimTouchScopeFOV = 20, AimTouchScopeDist = 300, AimTouchSniperPrio = 1, AimTouchSniperBone = 1, AimTouchSniperCond = 2, AimTouchSniperSpeed = 30, AimTouchSniperFOV = 20, AimTouchSniperDist = 400, MortarCond = 2, MortarSpeed = 2, MortarFOV = 2, MortarDist = 2}
+    end
+
+    local okData, GameplayData = pcall(require, "GameLua.GameCore.Data.GameplayData") 
+    if not okData or not GameplayData then return end 
+    local pc = GameplayData.GetPlayerController() 
+    local localPlayer = nil
+    if Valid(pc) then localPlayer = pc:GetPlayerCharacterSafety() end 
+
+    if not Valid(localPlayer) then 
+        if _G.BNTMODState.TrackedMarks then
+            for markId, _ in pairs(_G.BNTMODState.TrackedMarks) do SafeRemoveMark(markId) end
+        end
+        _G.BNTMODState.TrackedMarks = {} 
+        for key, data in pairs(_G.BNTMODState.EnemyMarks) do
+            if data and data.MIDs then
+                for meshStr, midTable in pairs(data.MIDs) do
+                    for k, _ in pairs(midTable) do midTable[k] = nil end
+                end
+                data.MIDs = nil
+            end
+        end
+        _G.BNTMODState.EnemyMarks = {}
+        _G.BNTMODState.PrevGraphicsState = {}
+        return 
+    end
+
+    local Cached_MyHUD = pc and pc.MyHUD or nil
+
+    if _G.BNTMODConfig.UnlockFPS then InitializeGraphicsUnlock() end
+    InitializeNativeESP()
+    ShowBNTMODVIPMenu()
+    
+    if _G.BNTMODConfig.IpadView and _G.BNTMODState.CustomTextData then
+        pcall(function()
+            local targetTPP = _G.BNTMODState.CustomTextData.IpadViewFOV or 120
+            local uTPPCam = localPlayer.ThirdPersonCameraComponent
+            if Valid(uTPPCam) and not localPlayer.bIsWeaponAiming then
+                if uTPPCam.FieldOfView ~= targetTPP then uTPPCam.FieldOfView = targetTPP end
+            end
+        end)
+    else
+        pcall(function()
+            local uTPPCam = localPlayer.ThirdPersonCameraComponent
+            if Valid(uTPPCam) and not localPlayer.bIsWeaponAiming then
+                if uTPPCam.FieldOfView ~= 80 then uTPPCam.FieldOfView = 80 end
+            end
         end)
     end
 
-    self:AddGameTimer(0.4, true, function()
-        if not slua.isValid(self.Object) then return end
-        if not CheckExpiration() then ShowExpiryPopup(true); return end
-        local localPlayer = GameplayData.GetPlayerCharacter()
-        if not slua.isValid(localPlayer) then return end
-
-        if self.Object == localPlayer then
-            if not localPlayer._bypassActive then
-                localPlayer._bypassActive = true
-                pcall(function()
-                    if _G.WHABypass and _G.WHABypass.Init then
-                        _G.WHABypass.Init()
-                        _G._WHA_BYPASS_ACTIVE = true
-                    end
-                end)
-
-                self:AddGameTimer(3.0, false, function()
-                    pcall(function()
-                        local Msg = package.loaded["client.slua.logic.common.logic_common_msg_box"]
-                        if not Msg then Msg = require("client.slua.logic.common.logic_common_msg_box") end
-                        local Web = require("client.slua.logic.url.logic_webview_sdk")
-                        local function onClick()
-                            if Web then Web:OpenURL("https://t.me/BABYNOOB9") end
-                        end
-                        if Msg and Msg.Show then
-                            Msg.Show(4, "✦ @BABYNOOB9  – REAL DEVELOPER ✦",
-                            "\n★ Creator : @BABYNOOB9 \n" ..
-                            "★ Status    : OPERATION & OPTIMIZED\n" ..
-                            "★ Bypass    : 50‑Layer Protocol (re‑applied 5s)\n" ..
-                            "★ @BABYNOOB9   : Sent Feedback\n\n" ..
-                            "✓ Premium Build Loaded Successfully!", onClick)
-                        end
-                    end)
-                end)
+    pcall(function()
+        if Valid(pc) then
+            if pc.HiggsBoson then pc.HiggsBoson.bMHActive = false; pc.HiggsBoson.bCallPreReplication = false end
+            if pc.HiggsBosonComponent then pc.HiggsBosonComponent.bMHActive = false; pc.HiggsBosonComponent.bCallPreReplication = false end
+        end
+    end)
+           
+    -- ========================================== 
+    -- GRAPHICS: WhiteBody REMOVED, ColorBodyNew PRESENT
+    -- ========================================== 
+    pcall(function()
+        local lsg = require("client.slua.logic.setting.logic_setting_graphics")
+        local gi = lsg.GetGameInstance()
+        if gi then
+            if _G.BNTMODConfig.RemoveGrass and not _G.BNTMODState.PrevGraphicsState.RemoveGrass then
+                gi:ExecuteCMD("grass.DensityScale", "0")
+                gi:ExecuteCMD("grass.DiscardDataOnLoad", "1")
+                _G.BNTMODState.PrevGraphicsState.RemoveGrass = true
+            elseif not _G.BNTMODConfig.RemoveGrass and _G.BNTMODState.PrevGraphicsState.RemoveGrass then
+                gi:ExecuteCMD("grass.DensityScale", "1")
+                gi:ExecuteCMD("grass.DiscardDataOnLoad", "0")
+                _G.BNTMODState.PrevGraphicsState.RemoveGrass = false
             end
+            if _G.BNTMODConfig.RemoveTrees and not _G.BNTMODState.PrevGraphicsState.RemoveTrees then
+                gi:ExecuteCMD("foliage.DensityScale", "0")
+                gi:ExecuteCMD("r.Foliage.DensityScale", "0")
+                gi:ExecuteCMD("foliage.MinimumScreenSize", "10000")
+                gi:ExecuteCMD("r.DisableTreeRender", "1")
+                _G.BNTMODState.PrevGraphicsState.RemoveTrees = true
+            elseif not _G.BNTMODConfig.RemoveTrees and _G.BNTMODState.PrevGraphicsState.RemoveTrees then
+                gi:ExecuteCMD("foliage.DensityScale", "1")
+                gi:ExecuteCMD("r.Foliage.DensityScale", "1")
+                gi:ExecuteCMD("foliage.MinimumScreenSize", "0.0001")
+                gi:ExecuteCMD("r.DisableTreeRender", "0")
+                _G.BNTMODState.PrevGraphicsState.RemoveTrees = false
+            end            
+            -- ColorBodyNew graphics setup (WhiteBody block REMOVED)
+            if _G.BNTMODConfig.BlackSky and not _G.BNTMODState.PrevGraphicsState.BlackSky then
+                gi:ExecuteCMD("r.CylinderMaxDrawHeight", "9999")
+                _G.BNTMODState.PrevGraphicsState.BlackSky = true
+            elseif not _G.BNTMODConfig.BlackSky and _G.BNTMODState.PrevGraphicsState.BlackSky then
+                gi:ExecuteCMD("r.CylinderMaxDrawHeight", "0000")
+                _G.BNTMODState.PrevGraphicsState.BlackSky = false
+            end
+        end
+    end)
+    
+    pcall(function()
+        local weapon = nil
+        pcall(function()
+            local weaponManager = localPlayer.WeaponManagerComponent
+            if Valid(weaponManager) and type(weaponManager.GetCurrentWeapon) == "function" then
+                weapon = weaponManager:GetCurrentWeapon()
+            end
+        end)
+        if not Valid(weapon) then
+            if type(localPlayer.GetCurrentShootWeapon) == "function" then weapon = localPlayer:GetCurrentShootWeapon()
+            elseif type(localPlayer.GetCurrentWeapon) == "function" then weapon = localPlayer:GetCurrentWeapon() end
+        end
+        if Valid(weapon) then
+            local entities = {}
+            if Valid(weapon.ShootWeaponEntity_GEN_VARIABLE) then table.insert(entities, weapon.ShootWeaponEntity_GEN_VARIABLE) end
+            if Valid(weapon.ShootWeaponEntity) then table.insert(entities, weapon.ShootWeaponEntity) end
+            if Valid(weapon.ShootWeaponComponent) and Valid(weapon.ShootWeaponComponent.ShootWeaponEntityComponent) then 
+                table.insert(entities, weapon.ShootWeaponComponent.ShootWeaponEntityComponent) 
+            end
+            for _, entity in ipairs(entities) do
+                local crosshairOn = _G.BNTMODConfig.Crosshair or _G.BNTMODConfig.Accuracy
+                if crosshairOn then
+                    if not entity.OriginalStatsCached then
+                        entity.OriginalStatsCached = {
+                            GameDeviationFactor = entity.GameDeviationFactor,
+                            GameDeviationAccuracy = entity.GameDeviationAccuracy
+                        }
+                    end
+                    if _G.BNTMODConfig.Crosshair then entity.GameDeviationFactor = 0.0 end
+                    if _G.BNTMODConfig.Accuracy then entity.GameDeviationAccuracy = 0.0 end
+                    entity.CrosshairModActive = true
+                elseif entity.CrosshairModActive then
+                    if entity.OriginalStatsCached then
+                        local orig = entity.OriginalStatsCached
+                        entity.GameDeviationFactor = orig.GameDeviationFactor
+                        entity.GameDeviationAccuracy = orig.GameDeviationAccuracy
+                    end
+                    entity.CrosshairModActive = false
+                end
+            end
+        end
+    end)
 
-            -- ✅ MISPLACED CODE MOVED HERE (inside the if self.Object == localPlayer)
-            if not localPlayer._monitorsSetup then
-                localPlayer._monitorsSetup = true
-                localPlayer:AddGameTimer(0.5, true, function()
-                    if not _G._WHA_BYPASS_ACTIVE then
+local GameplayData, gameplayDataReady, lockedTarget, lastAimRotation, aimActive = nil, false, nil, nil, false
+
+pcall(function()
+	local ok, module = pcall(require, "GameLua.GameCore.Data.GameplayData")
+	if ok and module then GameplayData = module; gameplayDataReady = true end
+end)
+
+local function valid(v)
+	if v == nil then return false end
+	local slua = rawget(_G, "slua")
+	if slua and type(slua.isValid) == "function" then
+		local ok, res = pcall(slua.isValid, v)
+		return ok and res == true
+	end
+	return true
+end
+
+local function normalize_angle(a)
+	while a > 180.0 do a = a - 360.0 end
+	while a < -180.0 do a = a + 360.0 end
+	return a
+end
+
+local function atan2(y, x)
+	if x > 0 then return math.atan(y / x)
+	elseif x < 0 and y >= 0 then return math.atan(y / x) + math.pi
+	elseif x < 0 and y < 0 then return math.atan(y / x) - math.pi
+	elseif x == 0 and y > 0 then return math.pi / 2
+	elseif x == 0 and y < 0 then return -math.pi / 2 end
+	return 0
+end
+
+pcall(function()
+	if not _G.BNTMODConfig.MortarAim then
+		if aimActive then aimActive = false; lockedTarget = nil; lastAimRotation = nil end
+		return
+	end
+	local uCon = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
+	if not valid(uCon) then return end
+	local pawn = uCon:GetPlayerCharacterSafety()
+	if not valid(pawn) then return end
+	local camera = uCon.PlayerCameraManager
+	if not valid(camera) then return end
+
+	local camLoc, camRot = camera:GetCameraLocation(), camera:GetCameraRotation()
+	if not camLoc or not camRot then return end
+
+	local weapon = pawn.CurrentWeapon or (type(pawn.GetCurrentWeapon) == "function" and pawn:GetCurrentWeapon())
+	local mortarState = 0
+	pcall(function() mortarState = weapon and weapon.MortarState or 0 end)
+
+	if not valid(weapon) or (mortarState ~= 2 and not string.find(string.lower(tostring(weapon)), "mortar", 1, true)) then
+		if aimActive then aimActive = false; lockedTarget = nil; lastAimRotation = nil end
+		return
+	end
+	if not aimActive then aimActive = true end
+
+	local mortarCond = _G.BNTMODState.CustomTextData.MortarCond or 2
+	local isFiring = false
+	pcall(function() isFiring = weapon.bIsFiring or weapon.IsFiring or false end)
+	if mortarCond == 1 and not isFiring then return end
+
+	local maxDistMeters = _G.BNTMODState.CustomTextData.MortarDist or 600
+	local fovVal = _G.BNTMODState.CustomTextData.MortarFOV or 40
+	local speedVal = _G.BNTMODState.CustomTextData.MortarSpeed or 30
+
+	if lockedTarget and lastAimRotation then
+		local y_d = math.abs(normalize_angle(camRot.Yaw - lastAimRotation.Yaw))
+		local p_d = math.abs(normalize_angle(camRot.Pitch - lastAimRotation.Pitch))
+		if y_d > 3.5 or p_d > 3.5 then lockedTarget = nil; lastAimRotation = nil end
+	end
+	if lockedTarget then
+		local pLoc, tLoc = pawn:K2_GetActorLocation(), lockedTarget:K2_GetActorLocation()
+		if not pLoc or not tLoc or (lockedTarget.bDead == true) or (math.sqrt((tLoc.X - pLoc.X)^2 + (tLoc.Y - pLoc.Y)^2) / 100.0 > maxDistMeters) then
+			lockedTarget = nil
+		end
+	end
+	if not lockedTarget and GameplayData then
+		local bestScore, bestTarget = fovVal, nil
+		local function scan(list)
+			if type(list) ~= "table" then return end
+			for _, actor in pairs(list) do
+				if valid(actor) and actor ~= pawn then
+					local tLoc = actor:K2_GetActorLocation()
+					if tLoc then
+						local dx, dy = tLoc.X - camLoc.X, tLoc.Y - camLoc.Y
+						local horiz = math.sqrt(dx * dx + dy * dy)
+						if (horiz / 100.0) <= maxDistMeters then
+							local yaw = atan2(dy, dx) * (180.0 / math.pi)
+							local y_d = math.abs(normalize_angle(yaw - camRot.Yaw))
+							if y_d <= fovVal then
+								if y_d < bestScore then bestScore = y_d; bestTarget = actor end
+							end
+						end
+					end
+				end
+			end
+		end
+		if type(GameplayData.GetAllPlayerCharacters) == "function" then scan(GameplayData.GetAllPlayerCharacters()) end
+		lockedTarget = bestTarget
+	end
+	if lockedTarget then
+		local pLoc, tLoc = pawn:K2_GetActorLocation(), lockedTarget:K2_GetActorLocation()
+		if pLoc and tLoc then
+			local dx, dy, dz = tLoc.X - pLoc.X, tLoc.Y - pLoc.Y, tLoc.Z - pLoc.Z
+			local horiz = math.sqrt(dx * dx + dy * dy)
+			local vel = 9070.0
+			pcall(function() vel = tonumber(weapon:GetBulletFireSpeedFromEntity()) or 9070.0 end)
+			local g = 980.0 * 2.8
+			local v2, v4 = vel * vel, (vel * vel) * (vel * vel)
+			local disc = v4 - (g * g * horiz * horiz) - (2.0 * g * dz * v2)
+			local b_pitch = disc < 0 and 45.0 or math.min(88.0, math.max(45.0, math.atan((v2 + math.sqrt(disc)) / (g * horiz)) * (180.0 / math.pi)))
+			local pitch = math.min(30.0, math.max(-60.0, (b_pitch - 45.0) * 2.093 - 60.0))
+			local yaw = atan2(dy, dx) * (180.0 / math.pi)
+			local targetRot = FRotator(pitch, yaw, 0)
+			local interpSpeed = math.max(1, speedVal) * 0.1
+			local currentRot = camRot
+			local finalPitch = currentRot.Pitch + (normalize_angle(targetRot.Pitch - currentRot.Pitch) * interpSpeed)
+			local finalYaw = currentRot.Yaw + (normalize_angle(targetRot.Yaw - currentRot.Yaw) * interpSpeed)
+			local rot = FRotator(finalPitch, finalYaw, 0)
+			pcall(function()
+				camera.bLimitViewPitch, camera.bLimitViewYaw = false, false
+				camera.ViewPitchMin, camera.ViewPitchMax = -89.9, 89.9
+				if type(pawn.K2_SetActorRotation) == "function" then pawn:K2_SetActorRotation(FRotator(0, finalYaw, 0), false) end
+				pawn.BaseAimRotation, uCon.ControlRotation = rot, rot
+			end)
+			lastAimRotation = rot
+		end
+	end
+end) 
+
+if _G.BNTMODConfig and (_G.BNTMODConfig.EspRifleCategory or _G.BNTMODConfig.EspSniperCategory or _G.BNTMODConfig.EspSMGCategory or _G.BNTMODConfig.EspShotgunCategory or _G.BNTMODConfig.EspVehicleCategory) then
+    pcall(function()
+        local MyHUD = Cached_MyHUD
+        if Valid(MyHUD) then
+            if not _G.CachedGameplayStatics then _G.CachedGameplayStatics = import("GameplayStatics") end
+            if not _G.CachedActorClass_ForWeapon then _G.CachedActorClass_ForWeapon = import("Actor") end 
+            if not _G.CachedWeaponArray then _G.CachedWeaponArray = slua.Array(UEnums.EPropertyClass.Object, _G.CachedActorClass_ForWeapon) end
+            if not _G.ActorWeaponCacheInit then
+                _G.NonWeaponCache = setmetatable({}, { __mode = "k" })
+                _G.ActorWeaponCacheInit = true
+            end
+            if not _G.ActorVehicleCacheInit then
+                _G.NonVehicleCache = setmetatable({}, { __mode = "k" })
+                _G.ActorVehicleCacheInit = true
+            end
+            local ui_util = require("client.common.ui_util")
+            local gameInstance = ui_util and ui_util.GetGameInstance()
+            if gameInstance and _G.CachedGameplayStatics then
+                local curTime = os.clock()
+                if not _G.LastWeaponScanTime or (curTime - _G.LastWeaponScanTime) > SCAN_INTERVAL then
+                    _G.LastWeaponScanTime = curTime
+                    local allActors = _G.CachedGameplayStatics.GetAllActorsOfClass(gameInstance, _G.CachedActorClass_ForWeapon, _G.CachedWeaponArray)
+                    local weaponList = {}
+                    local vehicleList = {}
+                    if allActors then
+                        for _, actor in pairs(allActors) do
+                            if slua.isValid(actor) and not actor.bHidden and not actor.bTearOff then
+                                if not _G.NonWeaponCache[actor] then
+                                    local isMatchedWeapon = false
+                                    local detectedWeaponName = "WEAPON"
+                                    local nameLower = nil
+                                    pcall(function() nameLower = string.lower(type(actor.GetName) == "function" and actor:GetName() or tostring(actor)) end)
+                                    if nameLower then
+                                        if string.find(nameLower, "m416") or string.find(nameLower, "rifle_m4") then isMatchedWeapon, detectedWeaponName = true, "M416"
+                                        elseif string.find(nameLower, "akm") then isMatchedWeapon, detectedWeaponName = true, "AKM"
+                                        elseif string.find(nameLower, "scar") then isMatchedWeapon, detectedWeaponName = true, "SCAR-L"
+                                        elseif string.find(nameLower, "m16a4") then isMatchedWeapon, detectedWeaponName = true, "M16A4"
+                                        elseif string.find(nameLower, "m762") then isMatchedWeapon, detectedWeaponName = true, "M762"
+                                        elseif string.find(nameLower, "groza") then isMatchedWeapon, detectedWeaponName = true, "Groza"
+                                        elseif string.find(nameLower, "aug") then isMatchedWeapon, detectedWeaponName = true, "AUG"
+                                        elseif string.find(nameLower, "qbz") then isMatchedWeapon, detectedWeaponName = true, "QBZ"
+                                        elseif string.find(nameLower, "g36c") then isMatchedWeapon, detectedWeaponName = true, "G36C"
+                                        elseif string.find(nameLower, "famas") then isMatchedWeapon, detectedWeaponName = true, "FAMAS"
+                                        elseif string.find(nameLower, "kar98k") then isMatchedWeapon, detectedWeaponName = true, "Kar98k"
+                                        elseif string.find(nameLower, "m24") then isMatchedWeapon, detectedWeaponName = true, "M24"
+                                        elseif string.find(nameLower, "awm") then isMatchedWeapon, detectedWeaponName = true, "AWM"
+                                        elseif string.find(nameLower, "sks") then isMatchedWeapon, detectedWeaponName = true, "SKS"
+                                        elseif string.find(nameLower, "slr") then isMatchedWeapon, detectedWeaponName = true, "SLR"
+                                        elseif string.find(nameLower, "mini14") then isMatchedWeapon, detectedWeaponName = true, "Mini14"
+                                        elseif string.find(nameLower, "mk14") then isMatchedWeapon, detectedWeaponName = true, "Mk14"
+                                        elseif string.find(nameLower, "vss") then isMatchedWeapon, detectedWeaponName = true, "VSS"
+                                        elseif string.find(nameLower, "qbu") then isMatchedWeapon, detectedWeaponName = true, "QBU"
+                                        elseif string.find(nameLower, "mosin") then isMatchedWeapon, detectedWeaponName = true, "Mosin"
+                                        elseif string.find(nameLower, "amr") or string.find(nameLower, "lynx") then isMatchedWeapon, detectedWeaponName = true, "AMR"
+                                        elseif string.find(nameLower, "ump45") or string.find(nameLower, "ump9") then isMatchedWeapon, detectedWeaponName = true, "UMP45"
+                                        elseif string.find(nameLower, "uzi") then isMatchedWeapon, detectedWeaponName = true, "UZI"
+                                        elseif string.find(nameLower, "vector") then isMatchedWeapon, detectedWeaponName = true, "Vector"
+                                        elseif string.find(nameLower, "thompson") or string.find(nameLower, "tommy") then isMatchedWeapon, detectedWeaponName = true, "Tommy"
+                                        elseif string.find(nameLower, "bizon") then isMatchedWeapon, detectedWeaponName = true, "Bizon"
+                                        elseif string.find(nameLower, "mp5k") then isMatchedWeapon, detectedWeaponName = true, "MP5K"
+                                        elseif string.find(nameLower, "p90") then isMatchedWeapon, detectedWeaponName = true, "P90"
+                                        elseif string.find(nameLower, "m249") then isMatchedWeapon, detectedWeaponName = true, "M249"
+                                        elseif string.find(nameLower, "dp28") then isMatchedWeapon, detectedWeaponName = true, "DP-28"
+                                        elseif string.find(nameLower, "mg3") then isMatchedWeapon, detectedWeaponName = true, "MG3"
+                                        elseif string.find(nameLower, "s686") then isMatchedWeapon, detectedWeaponName = true, "S686"
+                                        elseif string.find(nameLower, "s1897") then isMatchedWeapon, detectedWeaponName = true, "S1897"
+                                        elseif string.find(nameLower, "s12k") then isMatchedWeapon, detectedWeaponName = true, "S12K"
+                                        elseif string.find(nameLower, "dbs") then isMatchedWeapon, detectedWeaponName = true, "DBS"
+                                        elseif string.find(nameLower, "o12") or string.find(nameLower, "origin") then isMatchedWeapon, detectedWeaponName = true, "Origin 12"
+                                        elseif string.find(nameLower, "crossbow") then isMatchedWeapon, detectedWeaponName = true, "Crossbow"
+                                        elseif string.find(nameLower, "deagle") then isMatchedWeapon, detectedWeaponName = true, "Deagle"
+                                        elseif string.find(nameLower, "flare") then isMatchedWeapon, detectedWeaponName = true, "Flare"
+                                        end
+                                    end
+                                    local shouldShowWeapon = false
+                                    if isMatchedWeapon then
+                                        if detectedWeaponName == "M416" and _G.BNTMODConfig.Weapon_M416 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "AKM" and _G.BNTMODConfig.Weapon_AKM then shouldShowWeapon = true end
+                                        if detectedWeaponName == "SCAR-L" and _G.BNTMODConfig.Weapon_SCAR then shouldShowWeapon = true end
+                                        if detectedWeaponName == "M16A4" and _G.BNTMODConfig.Weapon_M16A4 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "M762" and _G.BNTMODConfig.Weapon_M762 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "Groza" and _G.BNTMODConfig.Weapon_Groza then shouldShowWeapon = true end
+                                        if detectedWeaponName == "AUG" and _G.BNTMODConfig.Weapon_AUG then shouldShowWeapon = true end
+                                        if detectedWeaponName == "QBZ" and _G.BNTMODConfig.Weapon_QBZ then shouldShowWeapon = true end
+                                        if detectedWeaponName == "G36C" and _G.BNTMODConfig.Weapon_G36C then shouldShowWeapon = true end
+                                        if detectedWeaponName == "FAMAS" and _G.BNTMODConfig.Weapon_FAMAS then shouldShowWeapon = true end
+                                        if detectedWeaponName == "Kar98k" and _G.BNTMODConfig.Weapon_Kar98k then shouldShowWeapon = true end
+                                        if detectedWeaponName == "M24" and _G.BNTMODConfig.Weapon_M24 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "AWM" and _G.BNTMODConfig.Weapon_AWM then shouldShowWeapon = true end
+                                        if detectedWeaponName == "SKS" and _G.BNTMODConfig.Weapon_SKS then shouldShowWeapon = true end
+                                        if detectedWeaponName == "SLR" and _G.BNTMODConfig.Weapon_SLR then shouldShowWeapon = true end
+                                        if detectedWeaponName == "Mini14" and _G.BNTMODConfig.Weapon_Mini14 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "Mk14" and _G.BNTMODConfig.Weapon_Mk14 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "VSS" and _G.BNTMODConfig.Weapon_VSS then shouldShowWeapon = true end
+                                        if detectedWeaponName == "QBU" and _G.BNTMODConfig.Weapon_QBU then shouldShowWeapon = true end
+                                        if detectedWeaponName == "Mosin" and _G.BNTMODConfig.Weapon_Mosin then shouldShowWeapon = true end
+                                        if detectedWeaponName == "AMR" and _G.BNTMODConfig.Weapon_AMR then shouldShowWeapon = true end
+                                        if detectedWeaponName == "UMP45" and _G.BNTMODConfig.Weapon_UMP45 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "UZI" and _G.BNTMODConfig.Weapon_UZI then shouldShowWeapon = true end
+                                        if detectedWeaponName == "Vector" and _G.BNTMODConfig.Weapon_Vector then shouldShowWeapon = true end
+                                        if detectedWeaponName == "Tommy" and _G.BNTMODConfig.Weapon_Tommy then shouldShowWeapon = true end
+                                        if detectedWeaponName == "Bizon" and _G.BNTMODConfig.Weapon_Bizon then shouldShowWeapon = true end
+                                        if detectedWeaponName == "MP5K" and _G.BNTMODConfig.Weapon_MP5K then shouldShowWeapon = true end
+                                        if detectedWeaponName == "P90" and _G.BNTMODConfig.Weapon_P90 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "M249" and _G.BNTMODConfig.Weapon_M249 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "DP-28" and _G.BNTMODConfig.Weapon_DP28 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "MG3" and _G.BNTMODConfig.Weapon_MG3 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "S686" and _G.BNTMODConfig.Weapon_S686 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "S1897" and _G.BNTMODConfig.Weapon_S1897 then shouldShowWeapon = true end
+                                        if detectedWeaponName == "S12K" and _G.BNTMODConfig.Weapon_S12K then shouldShowWeapon = true end
+                                        if detectedWeaponName == "DBS" and _G.BNTMODConfig.Weapon_DBS then shouldShowWeapon = true end
+                                        if detectedWeaponName == "Origin 12" and _G.BNTMODConfig.Weapon_Origin then shouldShowWeapon = true end
+                                        if detectedWeaponName == "Crossbow" and _G.BNTMODConfig.Weapon_Crossbow then shouldShowWeapon = true end
+                                        if detectedWeaponName == "Deagle" and _G.BNTMODConfig.Weapon_Deagle then shouldShowWeapon = true end
+                                        if detectedWeaponName == "Flare" and _G.BNTMODConfig.Weapon_Flare then shouldShowWeapon = true end
+                                    end
+                                    if shouldShowWeapon then table.insert(weaponList, {actor = actor, name = detectedWeaponName})
+                                    else _G.NonWeaponCache[actor] = true end
+                                end
+                                if _G.BNTMODConfig.EspVehicleCategory and not _G.NonVehicleCache[actor] then
+                                    local isMatchedVeh = false
+                                    local detectedVehName = "VEHICLE"
+                                    local nameLowerVeh = nil
+                                    pcall(function() nameLowerVeh = string.lower(type(actor.GetName) == "function" and actor:GetName() or tostring(actor)) end)
+                                    if nameLowerVeh then
+                                        if string.find(nameLowerVeh, "mirado") then isMatchedVeh, detectedVehName = true, "Mirado"
+                                        elseif string.find(nameLowerVeh, "dacia") then isMatchedVeh, detectedVehName = true, "Dacia"
+                                        elseif string.find(nameLowerVeh, "buggy") then isMatchedVeh, detectedVehName = true, "Buggy"
+                                        elseif string.find(nameLowerVeh, "uaz") then isMatchedVeh, detectedVehName = true, "UAZ"
+                                        elseif string.find(nameLowerVeh, "sedan") or string.find(nameLowerVeh, "coupe") then isMatchedVeh, detectedVehName = true, "Coupe"
+                                        elseif string.find(nameLowerVeh, "motorcycle") or string.find(nameLowerVeh, "bike") then isMatchedVeh, detectedVehName = true, "Motorcycle"
+                                        elseif string.find(nameLowerVeh, "helicopter") then isMatchedVeh, detectedVehName = true, "Heli"
+                                        elseif string.find(nameLowerVeh, "brdm") then isMatchedVeh, detectedVehName = true, "BRDM"
+                                        elseif string.find(nameLowerVeh, "minibus") then isMatchedVeh, detectedVehName = true, "Minibus"
+                                        elseif string.find(nameLowerVeh, "monstertruck") then isMatchedVeh, detectedVehName = true, "MonsterTruck"
+                                        elseif string.find(nameLowerVeh, "pickup") or string.find(nameLowerVeh, "rony") then isMatchedVeh, detectedVehName = true, "Pickup"
+                                        end
+                                    end
+                                    local shouldShowVeh = false
+                                    if isMatchedVeh then
+                                        if detectedVehName == "Mirado" and _G.BNTMODConfig.Veh_MiradoOrange then shouldShowVeh = true end
+                                        if detectedVehName == "Dacia" and _G.BNTMODConfig.Veh_Dacia then shouldShowVeh = true end
+                                        if detectedVehName == "Buggy" and _G.BNTMODConfig.Veh_Buggy then shouldShowVeh = true end
+                                        if detectedVehName == "Coupe" and _G.BNTMODConfig.Veh_UAZ_Old then shouldShowVeh = true end
+                                        if detectedVehName == "Motorcycle" and _G.BNTMODConfig.Veh_Motorcycle then shouldShowVeh = true end
+                                        if detectedVehName == "Heli" and _G.BNTMODConfig.Veh_Helicopter then shouldShowVeh = true end
+                                        if detectedVehName == "BRDM" and _G.BNTMODConfig.Veh_BRDM then shouldShowVeh = true end
+                                        if detectedVehName == "Minibus" and _G.BNTMODConfig.Veh_Minibus then shouldShowVeh = true end
+                                        if detectedVehName == "MonsterTruck" and _G.BNTMODConfig.Veh_MonsterTruck then shouldShowVeh = true end
+                                        if detectedVehName == "UAZ" and _G.BNTMODConfig.Veh_UAZ then shouldShowVeh = true end
+                                        if detectedVehName == "Pickup" and _G.BNTMODConfig.Veh_Pickup then shouldShowVeh = true end
+                                    end
+                                    if shouldShowVeh then table.insert(vehicleList, {actor = actor, name = detectedVehName})
+                                    else _G.NonVehicleCache[actor] = true end
+                                end
+                            end
+                        end
+                    end
+                    _G.CachedWeaponList = weaponList
+                    _G.CachedVehicleList = vehicleList
+                end
+                if _G.CachedWeaponList then
+                    for _, item in ipairs(_G.CachedWeaponList) do
+                        local weapon = item.actor
+                        if slua.isValid(weapon) and not weapon.bHidden then
+                            local distM = 0
+                            pcall(function() distM = localPlayer:GetDistanceTo(weapon) / 100 end)
+                            if distM > 1.5 and distM <= 100 then
+                                local text = string.format("%s [%dm]", item.name, math.floor(distM))
+                                local weaponColor = {R = 0, G = 255, B = 255, A = 255}
+                                local dynamicScale = math.max(0.6, 1.1 - (distM / 200))
+                                MyHUD:AddDebugText(text, weapon, 1.0, {X=0, Y=0, Z=100}, {X=0, Y=0, Z=100}, weaponColor, true, false, true, nil, dynamicScale, true)
+                            end
+                        end
+                    end
+                end
+                if _G.CachedVehicleList then
+                    for _, item in ipairs(_G.CachedVehicleList) do
+                        local vehicle = item.actor
+                        if slua.isValid(vehicle) and not vehicle.bHidden then
+                            local distM = 0
+                            pcall(function() distM = localPlayer:GetDistanceTo(vehicle) / 100 end)
+                            if distM > 3 and distM <= 150 then
+                                local text = string.format("[%s] %dm", item.name, math.floor(distM))
+                                local vehicleColor = {R = 255, G = 165, B = 0, A = 255}
+                                local dynamicScale = math.max(0.6, 1.1 - (distM / 500))
+                                MyHUD:AddDebugText(text, vehicle, 1.0, {X=0, Y=0, Z=100}, {X=0, Y=0, Z=100}, vehicleColor, true, false, true, nil, dynamicScale, true)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+       
+    pcall(function()
+        local weapon = nil
+        pcall(function()
+            local weaponManager = localPlayer.WeaponManagerComponent
+            if Valid(weaponManager) and type(weaponManager.GetCurrentWeapon) == "function" then
+                weapon = weaponManager:GetCurrentWeapon()
+            end
+        end)
+        if not Valid(weapon) then
+            if type(localPlayer.GetCurrentShootWeapon) == "function" then weapon = localPlayer:GetCurrentShootWeapon()
+            elseif type(localPlayer.GetCurrentWeapon) == "function" then weapon = localPlayer:GetCurrentWeapon() end
+        end
+        if Valid(weapon) then
+            local entities = {}
+            if Valid(weapon.ShootWeaponEntity_GEN_VARIABLE) then table.insert(entities, weapon.ShootWeaponEntity_GEN_VARIABLE) end
+            if Valid(weapon.ShootWeaponEntity) then table.insert(entities, weapon.ShootWeaponEntity) end
+            if Valid(weapon.ShootWeaponComponent) and Valid(weapon.ShootWeaponComponent.ShootWeaponEntityComponent) then 
+                table.insert(entities, weapon.ShootWeaponComponent.ShootWeaponEntityComponent) 
+            end
+            for _, entity in ipairs(entities) do
+                local anyWeaponModOn = _G.BNTMODConfig.CustomHRecoil or _G.BNTMODConfig.CustomVRecoil or _G.BNTMODConfig.LessShake or _G.BNTMODConfig.Accuracy or _G.BNTMODConfig.Crosshair or _G.BNTMODConfig.CustomAimbot or _G.BNTMODConfig.CustomAimbotClose
+                if anyWeaponModOn then
+                    if not entity.OriginalStatsCached then
+                        entity.OriginalStatsCached = {
+                            GameDeviationFactor = entity.GameDeviationFactor,
+                            GameDeviationAccuracy = entity.GameDeviationAccuracy,
+                            BulletFireSpeed = entity.BulletFireSpeed,
+                            ShootInterval = entity.ShootInterval,
+                            BaseDamage = entity.BaseDamage,
+                            AccessoriesHRecoilFactor = entity.AccessoriesHRecoilFactor,
+                            AccessoriesVRecoilFactor = entity.AccessoriesVRecoilFactor,
+                            RecoilKick = entity.RecoilKick,
+                            RecoilKickADS = entity.RecoilKickADS,
+                            AnimationKick = entity.AnimationKick
+                        }
+                    end
+                    if _G.BNTMODConfig.CustomHRecoil then entity.AccessoriesHRecoilFactor = _G.BNTMODState.CustomTextData.HRecoil or 0.3 
+                    elseif _G.BNTMODConfig.LessRecoil then entity.AccessoriesHRecoilFactor = 0.3 end
+                    if _G.BNTMODConfig.CustomVRecoil then entity.AccessoriesVRecoilFactor = _G.BNTMODState.CustomTextData.VRecoil or 0.3
+                    elseif _G.BNTMODConfig.VerticalRecoil then entity.AccessoriesVRecoilFactor = 0.3 end
+                    if _G.BNTMODConfig.LessShake then entity.RecoilKickADS = 0.0 end
+                    if _G.BNTMODConfig.Accuracy then entity.GameDeviationAccuracy = 0.0 end
+                    if _G.BNTMODConfig.Crosshair then entity.GameDeviationFactor = 0.0 end
+                    entity.BNTMODWeaponModsActive = true
+                elseif entity.BNTMODWeaponModsActive then
+                    if entity.OriginalStatsCached then
+                        local orig = entity.OriginalStatsCached
+                        entity.GameDeviationFactor = orig.GameDeviationFactor
+                        entity.GameDeviationAccuracy = orig.GameDeviationAccuracy
+                        entity.BulletFireSpeed = orig.BulletFireSpeed
+                        entity.ShootInterval = orig.ShootInterval
+                        entity.BaseDamage = orig.BaseDamage
+                        entity.AccessoriesHRecoilFactor = orig.AccessoriesHRecoilFactor
+                        entity.AccessoriesVRecoilFactor = orig.AccessoriesVRecoilFactor
+                        entity.RecoilKick = orig.RecoilKick
+                        entity.RecoilKickADS = orig.RecoilKickADS
+                        entity.AnimationKick = orig.AnimationKick
+                    end
+                    entity.BNTMODWeaponModsActive = false
+                end
+            end
+        end
+    end)
+
+    pcall(function()
+        local allCharacters = {}
+        if GameplayData.GetAllPlayerCharacters then allCharacters = GameplayData.GetAllPlayerCharacters()
+        elseif GameplayData.GameCharacters then for _, char in pairs(GameplayData.GameCharacters) do table.insert(allCharacters, char) end end
+        
+        local currentValidKeys = {}
+        for _, enemy in pairs(allCharacters) do
+            if Valid(enemy) and enemy ~= localPlayer then currentValidKeys[GetSafeEnemyKey(enemy)] = true end
+        end
+        for key, data in pairs(_G.BNTMODState.EnemyMarks) do
+            if not currentValidKeys[key] then
+                SafeRemoveMark(data.radarMark); SafeRemoveMark(data.hpMark); SafeRemoveMark(data.distMark)
+                if _G.AimTouchVisCache and _G.AimTouchVisCache[key] then _G.AimTouchVisCache[key] = nil end
+                data.enemy = nil
+                data.CachedMeshes = nil
+                _G.BNTMODState.EnemyMarks[key] = nil
+            end
+        end
+
+        local realCount = 0
+        local aiCount = 0
+        local mLoc = nil
+        pcall(function() if type(localPlayer.K2_GetActorLocation) == "function" then mLoc = localPlayer:K2_GetActorLocation() end end)
+
+        for _, enemy in pairs(allCharacters) do
+            if Valid(enemy) and enemy ~= localPlayer and enemy.TeamID ~= localPlayer.TeamID then
+                local bIsReallyDead = false
+                pcall(function()
+                    if type(enemy.IsDead) == "function" then bIsReallyDead = enemy:IsDead()
+                    elseif enemy.bIsDead ~= nil then bIsReallyDead = enemy.bIsDead
+                    elseif enemy.bIsDeadFlag ~= nil then bIsReallyDead = enemy.bIsDeadFlag end
+                    if enemy.HealthStatus ~= nil and enemy.HealthStatus == 2 then bIsReallyDead = true end
+                end)
+
+                local eKey = GetSafeEnemyKey(enemy)
+                _G.BNTMODState.EnemyMarks[eKey] = _G.BNTMODState.EnemyMarks[eKey] or { enemy = enemy }
+                local markData = _G.BNTMODState.EnemyMarks[eKey]
+                markData.enemy = enemy 
+
+                if not bIsReallyDead then
+                    if markData.lastEnemyActor ~= enemy then
+                        if markData.hpMark then SafeRemoveMark(markData.hpMark); markData.hpMark = nil end
+                        if markData.distMark then SafeRemoveMark(markData.distMark); markData.distMark = nil end
+                        if markData.radarMark then SafeRemoveMark(markData.radarMark); markData.radarMark = nil end
+                        markData.lastEnemyActor = enemy
+                        markData.LastFrameUIState = nil
+                    end
+                    
+                    local eMesh = nil
+                    pcall(function() eMesh = enemy.Mesh or (type(enemy.getAvatarComponent2) == "function" and enemy:getAvatarComponent2() or nil) end)
+                    local aLoc = nil
+                    pcall(function() if type(enemy.K2_GetActorLocation) == "function" then aLoc = enemy:K2_GetActorLocation() end end)
+                    
+                    CheckIsAI(enemy, markData)
+
+                    -- ColorBodyNew
+                    if _G.BNTMODConfig.ColorBodyNew then 
+                        ApplyColorBodyNew(enemy, markData)
+                    else
+                        UndoColorBodyNew(enemy, markData)
+                    end
+
+                    local distM = 0
+                    pcall(function() distM = localPlayer:GetDistanceTo(enemy) / 100 end)
+
+                    if distM <= ESP_MAX_DIST then
+                        local currentHp, maxHp = 100, 100
+                        local showFrameUI = _G.BNTMODConfig.EspVip or _G.BNTMODConfig.EspVipPro
+                    if showFrameUI then
                         pcall(function()
-                            if _G.WHABypass and _G.WHABypass.Init then
-                                _G.WHABypass.Init()
-                                _G._WHA_BYPASS_ACTIVE = true
+                            if enemy.Health then currentHp = enemy.Health elseif type(enemy.GetHealth) == "function" then currentHp = enemy:GetHealth() end
+                            if enemy.HealthMax then maxHp = enemy.HealthMax elseif type(enemy.GetHealthMax) == "function" then maxHp = enemy:GetHealthMax() end
+                        end)
+                        if maxHp <= 0 then maxHp = 100 end
+                    end
+                    local hpRatio = currentHp / maxHp
+
+                    if _G.BNTMODConfig.EspAntenna then
+                        pcall(function()
+                            local MyHUD = Cached_MyHUD
+                            if Valid(MyHUD) and distM <= 400 then
+                                local loopCount = 8  
+                                local zStep = 1000     
+                                local baseZ = 105     
+                                local topZ = baseZ + (loopCount * zStep)
+                                for i = 1, loopCount do
+                                    local zOffset = baseZ + (i * zStep)
+                                    MyHUD:AddDebugText("|", enemy, 0.06,
+                                        {X=0, Y=0, Z=zOffset}, {X=0, Y=0, Z=zOffset},
+                                        C_GREEN, true, false, true, nil, 1.2, true)
+                                end
+                                MyHUD:AddDebugText("I", enemy, 0.06,
+                                        {X=0, Y=0, Z=topZ + 60}, {X=0, Y=0, Z=topZ + 60},
+                                        C_GREEN, true, false, true, nil, 1.5, true)
                             end
                         end)
                     end
-                end)
-                localPlayer:AddGameTimer(10.0, true, function()
-                    pcall(function()
-                        if _G.WHABypass and _G.WHABypass.Init then
-                            _G.WHABypass.Init()
-                            _G._WHA_BYPASS_ACTIVE = true
-                        end
-                    end)
-                end)
-            end
 
-            -- Start new wallhack timer
-            if not self._newWallhackStarted then
-                self._newWallhackStarted = true
-                pcall(function()
-                    if _G.StartNewWallhack then _G.StartNewWallhack() end
-                end)
-            end
-
-            -- Enemy Counter management
-            local enemyCounterEnabled = (_G.AK_GetVal("ENEMY_COUNTER") == 1)
-            if enemyCounterEnabled and not _G.ENEMY_COUNTER_TIMER then
-                _G.StartEnemyCounter()
-            elseif not enemyCounterEnabled and _G.ENEMY_COUNTER_TIMER then
-                _G.StopEnemyCounter()
-            end
-
-            _G.AKModTickCount = (_G.AKModTickCount or 0) + 1
-            if _G.AKModTickCount % 6 == 0 then cleanupDeadEnemyMarks() end
-
-            if not self.AK_NativeESP_Ready then
-                pcall(function()
-                    local gameplayTools = require("GameLua.Mod.BaseMod.Common.GamePlayTools")
-                    local screenMarkConfig = gameplayTools.GetCurrentConfig("ScreenMarkConfig")
-                    if screenMarkConfig then
-                        if screenMarkConfig[1006] then
-                            screenMarkConfig[1006].bBindBlocked = true
-                            screenMarkConfig[1006].bBindOutScreen = true
-                            screenMarkConfig[1006].MaxWidgetNum = 99
-                            screenMarkConfig[1006].MaxShowDistance = 6000000
-                        end
-                        screenMarkConfig[9999] = distanceMarkerConfig
-                    end
-                end)
-                self.AK_NativeESP_Ready = true
-            end
-
-            local enemyCharacters = GameplayData.GetAllPlayerCharacters and GameplayData.GetAllPlayerCharacters() or {}
-            local isMapESP = _G.AK_GetVal("ESP_MAP")
-            local pc = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
-            local camForward = pc and KismetMathLibrary.GetForwardVector(pc:GetControlRotation())
-
-            for _, enemy in pairs(enemyCharacters) do
-                if slua.isValid(enemy) and enemy ~= localPlayer and enemy.TeamID ~= localPlayer.TeamID then
-                    local isDead = false
-                    pcall(function()
-                        if type(enemy.IsDead)=="function" then isDead = enemy:IsDead()
-                        elseif enemy.bIsDead then isDead = true end
-                        if enemy.bHidden or (enemy.Mesh and enemy.Mesh.bHidden) then isDead = true end
-                    end)
-                    if isDead then goto skip_enemy end
-
-                    processEnemyMapESP(enemy, localPlayer, isMapESP)
-
-                    if _G.AK_GetVal("ESP_HP") == 1 then
-                        if not enemy.bHasAKNativeHPBar then
+                        if _G.BNTMODConfig.Esp6 then
                             pcall(function()
-                                enemy.NativeHPBarMark = InGameMarkTools.ClientAddMapMark(1006, FVector(0,0,0), 0, "", 4, enemy)
-                                enemy.bHasAKNativeHPBar = true
+                                local curTime = os.clock()
+                                if markData.LastEsp6Time == nil or (curTime - markData.LastEsp6Time) >= ESP6_UPDATE_INTERVAL then
+                                    markData.LastEsp6Time = curTime
+                                    local MyHUD = Cached_MyHUD
+                                    if Valid(MyHUD) and Valid(eMesh) and aLoc then
+                                        if distM <= 150 then
+                                            if type(eMesh.GetSocketLocation) == "function" then
+                                                local boneList = (distM > BONE_LOD_DIST) and GLOBAL_BONE_LIST_LOW or GLOBAL_BONE_LIST
+                                                for _, bName in ipairs(boneList) do
+                                                    local wLoc = eMesh:GetSocketLocation(bName)
+                                                    if wLoc then
+                                                        local offset = {X = wLoc.X - aLoc.X, Y = wLoc.Y - aLoc.Y, Z = wLoc.Z - aLoc.Z}
+                                                        local mark = "▪"
+                                                        local fixedSize = 0.25 
+                                                        local color = C_CYAN
+                                                        if bName == "head" then mark = "●"; fixedSize = 0.45; color = C_RED
+                                                        elseif bName == "pelvis" or bName == "neck_01" then mark = "▪"; fixedSize = 0.35; color = C_YELLOW end
+                                                        MyHUD:AddDebugText(mark, enemy, 0.06, offset, offset, color, true, false, true, nil, fixedSize, true)
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
                             end)
                         end
-                    elseif enemy.bHasAKNativeHPBar then
-                        pcall(function() InGameMarkTools.ClientRemoveMapMark(enemy.NativeHPBarMark) end)
-                        enemy.bHasAKNativeHPBar = false
-                    end
 
-                    if _G.AK_GetVal("ESP_BOX") == 1 then
-                        pcall(function()
-                            if enemy.Replay_IsEnemyFrameUIExisted and not enemy:Replay_IsEnemyFrameUIExisted() then
-                                enemy:Replay_CreateEnemyFrameUI(true, true)
+                        if _G.BNTMODConfig.Esp7 then
+                            local myTeamId = localPlayer.TeamID or localPlayer:GetTeamID() or 0
+                            local targetTeamId = enemy.TeamID or enemy:GetTeamID() or 0
+                            if targetTeamId ~= myTeamId then
+                                local isAI = markData.AK_IS_BOT or false
+                                if isAI then aiCount = aiCount + 1 else realCount = realCount + 1 end
                             end
-                            if enemy.Replay_SetVisiableOfFrameUI then enemy:Replay_SetVisiableOfFrameUI(true) end
+                        end
+
+                    if showFrameUI then
+                        pcall(function()
+                            local SecurityCommonUtils = Cached_SecurityCommonUtils
+                            local show = true
+                            if enemy.HealthStatus and SecurityCommonUtils and SecurityCommonUtils.IsHealthStatusAlive then 
+                                if not SecurityCommonUtils.IsHealthStatusAlive(enemy.HealthStatus) then show = false end
+                            end
+                            if show and mLoc then
+                                if aLoc and SecurityCommonUtils and SecurityCommonUtils.IsVector then
+                                    if SecurityCommonUtils.IsVector(aLoc) and SecurityCommonUtils.IsVector(mLoc) then
+                                        if aLoc.Z >= 150000 or FVector.Dist2D(mLoc, aLoc) > 50000 then show = false end
+                                    end
+                                end
+                            end
+                            if show then
+                                if enemy.Replay_IsEnemyFrameUIExisted and not enemy:Replay_IsEnemyFrameUIExisted() then enemy:Replay_CreateEnemyFrameUI(true, true) end
+                                if enemy.Replay_SetVisiableOfFrameUI then enemy:Replay_SetVisiableOfFrameUI(true) end
+                                if enemy.Replay_UpdateEnemyFrameUI then enemy:Replay_UpdateEnemyFrameUI(hpRatio) end
+                                
+                                local uiComp = enemy.EnemyFrameUI or (type(enemy.GetEnemyFrameUI) == "function" and enemy:GetEnemyFrameUI())
+                                if Valid(uiComp) then
+                                    if markData.LastFrameUIState ~= "VISIBLE" then
+                                        if type(uiComp.SetVisibility) == "function" then uiComp:SetVisibility(0) end
+                                        if type(uiComp.SetHiddenInGame) == "function" then uiComp:SetHiddenInGame(false) end
+                                        markData.LastFrameUIState = "VISIBLE"
+                                    end
+                                end
+                            end
                         end)
                     else
                         pcall(function()
                             if enemy.Replay_SetVisiableOfFrameUI then enemy:Replay_SetVisiableOfFrameUI(false) end
+                            local uiComp = enemy.EnemyFrameUI or (type(enemy.GetEnemyFrameUI) == "function" and enemy:GetEnemyFrameUI())
+                            if Valid(uiComp) then
+                                if markData.LastFrameUIState ~= "HIDDEN" then
+                                    if type(uiComp.SetVisibility) == "function" then uiComp:SetVisibility(2) end
+                                    if type(uiComp.SetHiddenInGame) == "function" then uiComp:SetHiddenInGame(true) end
+                                    markData.LastFrameUIState = "HIDDEN"
+                                end
+                            end
                         end)
                     end
 
-                    ::skip_enemy::
+                        if _G.BNTMODConfig.EspVipPro then
+                            pcall(function()
+                                local hud = Cached_MyHUD
+                                if not (Valid(hud) and hud.AddDebugText) then return end
+                                local hp = enemy.Health or 100
+                                local maxHp = enemy.HealthMax or 100
+                                local isKnock = (hp <= 0 or enemy.HealthStatus == 1)
+                                local hpPercent = isKnock and 0 or (hp / maxHp)
+                                local pctValue = math.floor(hpPercent * 100 + 0.5)
+                                local pName = ""
+                                if _G.BNTMODConfig.EspName then pName = enemy.PlayerName or enemy.PlayerNamePublic or "Enemy" end
+                                local bIsVisible = false
+                                if pc and type(pc.LineOfSightTo) == "function" then bIsVisible = pc:LineOfSightTo(enemy) end
+                                local textColor = {R=255, G=255, B=255, A=255}
+                                if isKnock then textColor = {R=0, G=0, B=255, A=255}
+                                else textColor = bIsVisible and {R=0, G=255, B=0, A=255} or {R=255, G=0, B=0, A=255} end
+                                local label = ""
+                                if isKnock then label = (pName ~= "" and string.format("%s [♿]", pName) or "♿")
+                                else
+                                    if pName ~= "" then label = string.format("%s ▶ %.0f%%", pName, pctValue)
+                                    else label = string.format("▶ %.0f%%", pctValue) end
+                                end
+                                hud:AddDebugText(label, enemy, 0.2, {X=0, Y=0, Z=120}, {X=0, Y=0, Z=120}, textColor, true, false, true, nil, 1.0, true)
+                            end)
+                        end
+
+                        if _G.BNTMODConfig.EspName and not _G.BNTMODConfig.EspVipPro then
+                            pcall(function()
+                                local hud = Cached_MyHUD
+                                if not (Valid(hud) and hud.AddDebugText) then return end
+                                local pName = enemy.PlayerName or enemy.PlayerNamePublic or "Enemy"
+                                if pName == "" then return end
+                                local isKnock = (enemy.Health or 100) <= 0 or enemy.HealthStatus == 1
+                                local bIsVisible = true
+                                pcall(function()
+                                    if pc and type(pc.LineOfSightTo) == "function" then bIsVisible = pc:LineOfSightTo(enemy) end
+                                end)
+                                local nameColor = {R=255, G=255, B=255, A=255}
+                                if isKnock then nameColor = {R=0, G=0, B=255, A=255}
+                                else nameColor = bIsVisible and {R=0, G=255, B=0, A=255} or {R=255, G=0, B=0, A=255} end
+                                hud:AddDebugText(pName, enemy, 0.2, {X=0, Y=0, Z=120}, {X=0, Y=0, Z=120}, nameColor, true, false, true, nil, 1.0, true)
+                            end)
+                        end
+
+                        if _G.BNTMODConfig.EspVip then
+                            if markData.hpMark == nil then markData.hpMark = SafeAddMark(1006, FVector(0,0,0), 0, "", 4, enemy) end
+                            if markData.distMark == nil then markData.distMark = SafeAddMark(9999, FVector(0,0,0), 0, "", 4, enemy) end
+                        else
+                            if markData.hpMark then SafeRemoveMark(markData.hpMark); markData.hpMark = nil end
+                            if markData.distMark then SafeRemoveMark(markData.distMark); markData.distMark = nil end
+                        end
+                        if _G.BNTMODConfig.EspRadar then
+                            if not markData.radarMark or markData.radarMark == 0 then 
+                                markData.radarMark = SafeAddMark(8888, FVector(0,0,0), 0, "", 4, enemy) 
+                            end
+                        else
+                            if markData.radarMark and markData.radarMark ~= 0 then SafeRemoveMark(markData.radarMark); markData.radarMark = nil end
+                        end
+                    end
+                else
+                    if not markData.IsCleanedUp then
+                        SafeRemoveMark(markData.radarMark); markData.radarMark = nil
+                        SafeRemoveMark(markData.hpMark); markData.hpMark = nil
+                        SafeRemoveMark(markData.distMark); markData.distMark = nil
+                        markData.IsCleanedUp = true
+                    end
                 end
             end
+        end
 
-            -- ============ AIMBOT MANAGEMENT ============
-            if _G.AK_GetVal("AIMBOT") == 1 then
-                if not self._lastAimbotTime or (os.clock() - self._lastAimbotTime) > 2.0 then
-                    ApplyHardAimbot()
-                    self._lastAimbotTime = os.clock()
+        if _G.BNTMODConfig.Esp7 then
+            pcall(function()
+                local MyHUD = Cached_MyHUD
+                if Valid(MyHUD) then
+                    local totalEnemy = realCount + aiCount
+                    if totalEnemy > 0 then
+                        local text = string.format("ENEMY (P: %d | B: %d)", realCount, aiCount)
+                        MyHUD:AddDebugText(text, localPlayer, 1.2, {X=0, Y=0, Z=150}, {X=0, Y=0, Z=150}, {R=255, G=255, B=255, A=255}, true, false, true, nil, 1.0, true)
+                    else
+                        MyHUD:AddDebugText("( CLEAR ENEMY VIP )", localPlayer, 1.2, {X=0, Y=0, Z=150}, {X=0, Y=0, Z=150}, {R=0, G=255, B=0, A=255}, true, false, true, nil, 1.0, true)
+                end                              -- ✅ if totalEnemy ကို ပိတ်
+        end                                  -- ✅ if Valid(MyHUD) ကို ပိတ်
+    end)                                     -- ✅ pcall function ကို ပိတ်
+end
+
+        if _G.BNTMODConfig.EspStatic then
+            pcall(function()
+                local MyHUD = Cached_MyHUD
+                if not Valid(MyHUD) then return end
+
+                -- ESP ENEMY COUNT
+                if _G.BNTMODConfig.EspEnemyCount then
+                    local function GetRainbowColor()
+                        local time = os.clock()
+                        local r = math.sin(time * 0.8) * 0.5 + 0.5
+                        local g = math.sin(time * 0.8 + 2.094) * 0.5 + 0.5
+                        local b = math.sin(time * 0.8 + 4.188) * 0.5 + 0.5
+                        return { R = math.floor(r * 255), G = math.floor(g * 255), B = math.floor(b * 255), A = 255 }
+                    end
+
+                    local myTeamId = localPlayer.TeamID or localPlayer:GetTeamID() or 0
+                    local myPos = localPlayer:K2_GetActorLocation()
+                    local maxDist = 35000
+                    local realCount = 0
+                    local aiCount = 0
+
+                    for _, tPawn in pairs(allCharacters) do
+                        if slua.isValid(tPawn) and tPawn ~= localPlayer then
+                            local targetTeamId = tPawn.TeamID or tPawn:GetTeamID() or 0
+                            if targetTeamId ~= myTeamId then
+                                local enemyPos = tPawn:K2_GetActorLocation()
+                                if enemyPos then
+                                    local dx = enemyPos.X - myPos.X
+                                    local dy = enemyPos.Y - myPos.Y
+                                    local dz = enemyPos.Z - myPos.Z
+                                    local dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+                                    if dist <= maxDist then
+                                        local isAI = false
+                                        if tPawn.bIsAI == true or tPawn.IsAI == true then isAI = true end
+                                        if not isAI then
+                                            local pState = tPawn.PlayerState or (type(tPawn.GetPlayerState) == "function" and tPawn:GetPlayerState())
+                                            if slua.isValid(pState) then
+                                                if pState.bIsABot == true or pState.bIsBot == true then isAI = true end
+                                                local playerID = pState.PlayerId or pState.PlayerID
+                                                if playerID and (playerID == 0 or playerID < 10000) then isAI = true end
+                                                local exactPing = pState.ExactPing or pState.Ping
+                                                if exactPing and exactPing == 0 then isAI = true end
+                                            else isAI = true end
+                                        end
+                                        if isAI then aiCount = aiCount + 1 else realCount = realCount + 1 end
+                                    end
+                                end
+                            end
+                        end
+                    end
+
+                    local color = GetRainbowColor()
+                    local totalEnemy = realCount + aiCount
+                    local text = totalEnemy > 0 and string.format("❮ ENEMY : %d ❯", totalEnemy) or " ❮ CLEAR ENEMY || @POLO_OWNERl❯"
+                    MyHUD:AddDebugText(text, localPlayer, 1.05, {X=0, Y=0, Z=200}, {X=0, Y=0, Z=200}, color, true, false, true, nil, 1.2, true)
                 end
-            else
-                -- AIMBOT OFF → shake timer band karo
-                if _G._humanShakeTimer then
-                    pcall(function()
-                        local pc0 = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
-                        local c0 = pc0 and pc0:GetPlayerCharacterSafety()
-                        if slua.isValid(c0) then c0:RemoveGameTimer(_G._humanShakeTimer) end
-                    end)
-                    _G._humanShakeTimer = nil
-                    _G._humanSeed = nil
+
+                -- ESP WEAPON & STATUS ENEMY
+                if _G.BNTMODConfig.EspWeaponStatus then
+                    local ui_util = require("client.common.ui_util")
+                    local viewportSize = ui_util and ui_util.GetViewportSize()
+                    if viewportSize then
+                        local centerX = viewportSize.X * 0.5
+                        local centerY = viewportSize.Y * 0.5
+                        local FOV_RADIUS = (10 / 100.0) * (viewportSize.X / 2.0)
+                        local FVector2D = import("Vector2D")
+                        local bestTarget = nil
+                        local bestDist = 999999
+
+                        for _, enemy in pairs(allCharacters) do
+                            if Valid(enemy) and enemy ~= localPlayer and enemy.TeamID ~= localPlayer.TeamID then
+                                local ePos = enemy:K2_GetActorLocation()
+                                if ePos then
+                                    local screen = FVector2D()
+                                    if pc:ProjectWorldLocationToScreen(ePos, screen, false) and screen.X > 0 and screen.Y > 0 then
+                                        local dx = screen.X - centerX
+                                        local dy = screen.Y - centerY
+                                        local distScreen = math.sqrt(dx*dx + dy*dy)
+                                        if distScreen <= FOV_RADIUS then
+                                            local dist3D = localPlayer:GetDistanceTo(enemy)
+                                            if dist3D < bestDist then
+                                                bestDist = dist3D
+                                                bestTarget = enemy
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+
+                        if Valid(bestTarget) then
+                            local distM = math.floor(bestDist / 100)
+                            local hp = bestTarget.Health or 100
+                            local maxHp = bestTarget.HealthMax or 100
+                            local hpPercent = maxHp > 0 and math.floor((hp / maxHp) * 100) or 0
+                            local isKnock = (hp <= 0 or bestTarget.HealthStatus == 1)
+                            
+                            local weaponName = "Bare Hands"
+                            local eWeapon = nil
+                            if bestTarget.CurrentWeapon then eWeapon = bestTarget.CurrentWeapon
+                            elseif type(bestTarget.GetCurrentWeapon) == "function" then eWeapon = bestTarget:GetCurrentWeapon()
+                            elseif bestTarget.WeaponManagerComponent then eWeapon = bestTarget.WeaponManagerComponent.CurrentWeaponReplicated end
+                            if Valid(eWeapon) and type(eWeapon.GetWeaponName) == "function" then weaponName = eWeapon:GetWeaponName() end
+
+                            local statusText = isKnock and " [K]" or ""
+                            local text = string.format("%s | %dm | %d%% HP%s", weaponName, distM, hpPercent, statusText)
+                            MyHUD:AddDebugText(text, bestTarget, 0.15, {X=0, Y=0, Z=-50}, {X=0, Y=0, Z=-50}, C_YELLOW, true, false, true, nil, 0.8, true)
+                        end
+                    end
                 end
+            end)
+        end
+    end)
+end
+
+_G.BNTMODState.LoopToken = (_G.BNTMODState.LoopToken or 0) + 1 
+local myToken = _G.BNTMODState.LoopToken
+
+local function FastTick() 
+    if isExpired then 
+        if not _G.BNTMODNotifiedExpire then
+            Notify("MOD HAS EXPIRED! PLEASE CONTACT ADMIN TO RENEW!\nTelegram @POLO_OWNERl")
+            _G.BNTMODNotifiedExpire = true
+        end
+        return 
+    end
+    if myToken ~= _G.BNTMODState.LoopToken then return end
+    pcall(MainLoop) 
+    local okTicker, ticker = pcall(require, "common.time_ticker") 
+    if okTicker and ticker and ticker.AddTimerOnce then 
+        ticker.AddTimerOnce(LOOP_INTERVAL, FastTick)
+    end 
+end
+
+local aimbotToken = 0
+local function FastAimbotTick()
+    if isExpired then return end
+    if aimbotToken ~= _G.BNTMODState.AimbotLoopToken then return end
+    pcall(function()
+        if _G.BNTMODConfig.AimTouchEnable then _G.AimTouch() end
+    end)
+    local okTicker, ticker = pcall(require, "common.time_ticker")
+    if okTicker and ticker and ticker.AddTimerOnce then
+        ticker.AddTimerOnce(AIMBOT_INTERVAL, FastAimbotTick)
+    end
+end
+
+if not isExpired then
+    FastTick() 
+    _G.BNTMODState.AimbotLoopToken = (_G.BNTMODState.AimbotLoopToken or 0) + 1
+    aimbotToken = _G.BNTMODState.AimbotLoopToken
+    local okTicker, ticker = pcall(require, "common.time_ticker")
+    if okTicker and ticker and ticker.AddTimerOnce then
+        ticker.AddTimerOnce(0.1, FastAimbotTick)
+    end
+    Notify("Contact @POLO_OWNERl")
+else
+    FastTick() 
+end
+
+local function InitAllModSystems()
+    if isExpired then return end 
+    local GameplayData = package.loaded["GameLua.GameCore.Data.GameplayData"] or require("GameLua.GameCore.Data.GameplayData")
+    if not GameplayData then return end
+    pcall(function()
+        local LocalPlayer = GameplayData.GetPlayerCharacter and GameplayData.GetPlayerCharacter()
+        if slua.isValid(LocalPlayer) then
+            if LocalPlayer.bHasShownDevNotice == nil then
+                LocalPlayer.bHasShownDevNotice = false 
+                LocalPlayer.bHasShownExpiredNotice = false 
+                LocalPlayer.bIsDeadFlag = false
             end
-            -- =========================================
-        end -- closes if self.Object == localPlayer
-    end) -- closes outer timer
-end -- closes StartAdvancedSystems
-
--- Remaining global initializations
-pcall(function()
-    local ticker = require("common.time_ticker")
-    if ticker and ticker.AddTimerOnce then
-        ticker.AddTimerOnce(3, function() if CheckExpiration() then end end)
-        ticker.AddTimerOnce(4, function()
-            if not CheckExpiration() then ShowExpiryPopup(true) else _G.TryShowWelcome() end
-        end)
-    else
-        _G.TryShowWelcome()
-    end
-end)
-
-function _G.InitializeAllSystems()
-    if not CheckExpiration() then ShowExpiryPopup(true); return end
-    local gameplayData = package.loaded["GameLua.GameCore.Data.GameplayData"] or require("GameLua.GameCore.Data.GameplayData")
-    if gameplayData then
-        pcall(function()
-            local pc = gameplayData.GetPlayerCharacter and gameplayData.GetPlayerCharacter()
-            if slua.isValid(pc) then pc.StartAdvancedSystems = BRPlayerCharacterBase.StartAdvancedSystems end
-        end)
-    end
-end
-_G.InitializeAllSystems()
--- ============================================================
--- AUTO FEEDBACK SYSTEM (Telegram) - ALL RANKS SUPPORTED
--- ============================================================
-local AutoFeedback = {
-	Config = {
-		ServerURL = "",
-		TestMode = false
-	},
-	Hooked = false
-}
-
-local function AF_Log(message)
-	print(string.format("[@BABYNOOB9 ][%s] %s", os.date("%H:%M:%S"), tostring(message)))
+        end
+    end)
 end
 
-local function AF_Notify(message)
-	if _G.SRCHUBNotify then
-		pcall(_G.SRCHUBNotify, message)
-	end
+if not isExpired then
+    pcall(function() require("common.time_ticker").AddTimerOnce(0.5, InitAllModSystems) end)
 end
 
-local function AF_GetModule(name, allowRequire)
-	local loaded = package and package.loaded and package.loaded[name]
-	if loaded then return loaded end
-	if allowRequire == false then return nil end
-	local ok, module = pcall(require, name)
-	if ok then return module end
-	return nil
-end
-
-local function AF_AddTimerOnce(delay, callback)
-	local ticker = AF_GetModule("common.time_ticker")
-	if ticker and type(ticker.AddTimerOnce) == "function" then
-		ticker.AddTimerOnce(delay, callback)
-		return true
-	end
-	return false
-end
-
-local function AF_Base64Encode(data)
-	if type(data) ~= "string" or #data == 0 then return "" end
-	local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-	local output = {}
-	local outputIndex = 0
-	local index = 1
-	while index <= #data - 2 do
-		local a, b, c = string.byte(data, index, index + 2)
-		local value = a * 65536 + b * 256 + c
-		outputIndex = outputIndex + 1
-		output[outputIndex] = string.char(
-			string.byte(alphabet, math.floor(value / 262144) + 1),
-			string.byte(alphabet, math.floor(value / 4096) % 64 + 1),
-			string.byte(alphabet, math.floor(value / 64) % 64 + 1),
-			string.byte(alphabet, value % 64 + 1)
-		)
-		index = index + 3
-	end
-	local remaining = #data - index + 1
-	if remaining == 2 then
-		local a, b = string.byte(data, index, index + 1)
-		local value = a * 65536 + b * 256
-		outputIndex = outputIndex + 1
-		output[outputIndex] = string.char(
-			string.byte(alphabet, math.floor(value / 262144) + 1),
-			string.byte(alphabet, math.floor(value / 4096) % 64 + 1),
-			string.byte(alphabet, math.floor(value / 64) % 64 + 1),
-			string.byte("=")
-		)
-	elseif remaining == 1 then
-		local value = string.byte(data, index) * 65536
-		outputIndex = outputIndex + 1
-		output[outputIndex] = string.char(
-			string.byte(alphabet, math.floor(value / 262144) + 1),
-			string.byte(alphabet, math.floor(value / 4096) % 64 + 1),
-			string.byte("="),
-			string.byte("=")
-		)
-	end
-	return table.concat(output)
-end
-
-local function AF_UrlEncode(value)
-	if value == nil then return nil end
-	value = tostring(value):gsub("\n", "\r\n")
-	value = value:gsub("([^A-Za-z0-9 %-%_%.%~])", function(character)
-		return string.format("%%%02X", string.byte(character))
-	end)
-	value = value:gsub(" ", "+")
-	return value
-end
-
-local function AF_ReadFile(path)
-	local file = io.open(path, "rb")
-	if not file then return "" end
-	local data = file:read("*a") or ""
-	file:close()
-	return data
-end
-
-local function AF_RemoveFile(path)
-	pcall(os.remove, path)
-end
-
-local function AF_GetRankName(rank)
-	if rank < 1700 then return "Bronze"
-	elseif rank < 2200 then return "Silver"
-	elseif rank < 2700 then return "Gold"
-	elseif rank < 3200 then return "Platinum"
-	elseif rank < 3700 then return "Diamond"
-	elseif rank < 4200 then return "Crown"
-	elseif rank < 4700 then return "Ace"
-	elseif rank < 5200 then return "Ace Master"
-	elseif rank < 5600 then return "Ace Dominator"
-	end
-	return "Conqueror"
-end
-
-local FeedbackCaptionTemplate = "<b>TELEGRAM [ @@BABYNOOB9   ]</b>\n<pre>\nPlayer - %s\nUID    - %s\nTime   - %s\nKills  - %d\nRank   - %s\n</pre>\n[ ACTIVE - SAFE ]\n<b>Owner: GUDUxZOULOBB_OWNER</b>"
-
-function AutoFeedback.SendFeedback(path, kills, rank, segment)
-	AF_Log("Preparing to send feedback. Screenshot: " .. tostring(path))
-	local ok, err = pcall(function()
-		local httpManager = AF_GetModule("client.slua.logic.http.http_manager")
-		if not httpManager or type(httpManager.Post) ~= "function" then
-			AF_Log("HTTP manager is unavailable.")
-			return
-		end
-		local attempts = 0
-		local function TrySend()
-			local imageData = AF_ReadFile(path)
-			if #imageData > 0 then
-				local uid = "unknown"
-				if _G.DataMgr and _G.DataMgr.roleData and _G.DataMgr.roleData.uid then
-					uid = tostring(_G.DataMgr.roleData.uid)
-				elseif _G._KONG_UK then
-					uid = tostring(_G._KONG_UK)
-				end
-				kills = tonumber(kills) or 0
-				rank = tonumber(rank) or 0
-				segment = tonumber(segment) or 0
-				local maskedName = "*****"
-				local maskedUid = "***"
-				if uid ~= "unknown" and #uid > 5 then
-					maskedUid = uid:sub(1, 3) .. "***" .. uid:sub(-2)
-				end
-				local caption = string.format(
-					FeedbackCaptionTemplate,
-					maskedName,
-					maskedUid,
-					os.date("%H:%M:%S %d/%m/%Y"),
-					kills,
-					AF_GetRankName(rank)
-				)
-				local encodedImage = AF_Base64Encode(imageData)
-				encodedImage = encodedImage:gsub("%+", "%%2B")
-				encodedImage = encodedImage:gsub("/", "%%2F")
-				encodedImage = encodedImage:gsub("=", "%%3D")
-				AF_Notify("[@BABYNOOB9 ] Uploading Top 1 screenshot to VIP Server...")
-				local body = "base64_image=" .. encodedImage
-					.. "&caption=" .. AF_UrlEncode(caption)
-					.. "&bot_token=" .. AF_UrlEncode("8985984120:AAHjzFBzrbtjE7eINUoA1q2PhtVBbAb_tXM")
-					.. "&chat_id=" .. AF_UrlEncode("8974786596")
-				httpManager:Post(
-					AutoFeedback.Config.ServerURL,
-					{["Content-Type"] = "application/x-www-form-urlencoded"},
-					body,
-					nil,
-					function(success, _, response, errorMessage)
-						if success and response and tostring(response):find('"status":%s*true') then
-							AF_Notify("[@BABYNOOB9] Successfully sent! (Kills: " .. tostring(kills) .. ")")
-						else
-							local detail = tostring(response or errorMessage):sub(1, 40)
-							AF_Notify("[@BABYNOOB9] VIP Server error: " .. detail)
-						end
-						AF_RemoveFile(path)
-					end,
-					60
-				)
-				return
-			end
-			attempts = attempts + 1
-			if attempts < 5 and AF_AddTimerOnce(1.0, TrySend) then
-				return
-			end
-			AF_Notify("[@BABYNOOB9] Screenshot capture failed!")
-			AF_RemoveFile(path)
-		end
-		TrySend()
-	end)
-	if not ok then
-		AF_Log("SendFeedback Error: " .. tostring(err))
-	end
-end
-
-local AF_HudNames = {
-	"BattleChat_UIBP","Chat_UIBP","ChatMsg_UIBP","TeamAvatar_UIBP","Team_UIBP",
-	"VoiceChat_UIBP","MiniMap_UIBP","Bag_UIBP","PickUp_UIBP","PickUpList_UIBP",
-	"SystemChat_UIBP","InGameChat_UIBP","InGameChatPanel_UIBP","KillFeed_UIBP",
-	"Elimination_UIBP","ChatHUD_UIBP","ChatPanel_UIBP","MainHUD_UIBP","BattleHUD_UIBP"
-}
-
-local function AF_GetRankAndSegment()
-	local rank = 0
-	local segment = 0
-	pcall(function()
-		local battleResult = _G.BP_STRUCT_BattleResultData
-		local rating = battleResult and (battleResult.rating or battleResult.BP_STRUCT_BTRating)
-		if rating then
-			rank = tonumber(rating.rank_rating) or 0
-			segment = tonumber(rating.new_segment) or 0
-		end
-		if rank == 0 then
-			local funcUtil = AF_GetModule("common.func_util")
-			local roleData = _G.DataMgr and _G.DataMgr.roleData
-			if funcUtil and type(funcUtil.GetCurMaxSegementLevel) == "function"
-				and roleData and roleData.allzoneSegment then
-				segment = tonumber(funcUtil.GetCurMaxSegementLevel(roleData.allzoneSegment)) or 0
-			end
-			if roleData and roleData.segment_rating then
-				for _, value in pairs(roleData.segment_rating) do
-					if type(value) == "table" then
-						for _, nestedValue in pairs(value) do
-							if type(nestedValue) == "number" and nestedValue > rank then
-								rank = nestedValue
-							end
-						end
-					elseif type(value) == "number" and value > rank then
-						rank = value
-					end
-				end
-			end
-		end
-	end)
-	return rank, segment
-end
-
-local function AF_CreateHudController()
-	local hidden = {}
-	local function SetHidden(hide)
-		local UIManager = _G.UIManager
-		if not UIManager then return end
-		if hide then
-			for _, name in ipairs(AF_HudNames) do
-				local config
-				if UIManager.UI_Config_InGame and UIManager.UI_Config_InGame[name] then
-					config = UIManager.UI_Config_InGame[name]
-				elseif UIManager.UI_Config and UIManager.UI_Config[name] then
-					config = UIManager.UI_Config[name]
-				end
-				if config then
-					local view = type(UIManager.GetUI) == "function" and UIManager.GetUI(config) or nil
-					if view then
-						pcall(function()
-							if type(view.SetVisibility) == "function" then
-								view:SetVisibility(2)
-							elseif view.UIRoot and type(view.UIRoot.SetVisibility) == "function" then
-								view.UIRoot:SetVisibility(2)
-							elseif type(UIManager.HideUI) == "function" then
-								UIManager.HideUI(config)
-							elseif type(UIManager.CloseUI) == "function" then
-								UIManager.CloseUI(config)
-							end
-						end)
-						table.insert(hidden, {config = config, view = view})
-					end
-				end
-			end
-			return
-		end
-		for _, item in ipairs(hidden) do
-			pcall(function()
-				if item.view and type(item.view.SetVisibility) == "function" then
-					item.view:SetVisibility(0)
-				elseif item.view and item.view.UIRoot and type(item.view.UIRoot.SetVisibility) == "function" then
-					item.view.UIRoot:SetVisibility(0)
-				elseif type(UIManager.ShowUI) == "function" then
-					UIManager.ShowUI(item.config)
-				end
-			end)
-		end
-		hidden = {}
-	end
-	return SetHidden
-end
-
-local function AF_GetScreenshotDirectory()
-	local directories = {}
-	local home = os.getenv("HOME")
-	if home and home ~= "" then
-		table.insert(directories, home .. "/Documents/ShadowTrackerExtra/Saved/")
-	end
-	local packages = {"com.tencent.ig","com.vng.pubgmobile","com.pubg.krmobile","com.rekoo.pubgm","com.pubg.imobile"}
-	for _, packageName in ipairs(packages) do
-		table.insert(directories,
-			"/storage/emulated/0/Android/data/" .. packageName
-			.. "/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/")
-	end
-	local selected = directories[1]
-	for _, directory in ipairs(directories) do
-		local testPath = directory .. "t.tmp"
-		local file = io.open(testPath, "w")
-		if file then
-			file:close()
-			os.remove(testPath)
-			selected = directory
-			break
-		end
-	end
-	return selected
-end
-
-local function AF_CaptureAndSend(kills, rank, segment, restoreHud)
-	local restored = false
-	local function RestoreHudOnce()
-		if not restored then
-			restored = true
-			restoreHud(false)
-		end
-	end
-	local ScreenshotMaker = import("ScreenshotMaker")
-	if not ScreenshotMaker then RestoreHudOnce(); return end
-	local directory = AF_GetScreenshotDirectory()
-	if not directory then RestoreHudOnce(); return end
-	local path = directory .. string.format("kongwin_%s.jpg", os.time())
-	local uiUtil = AF_GetModule("client.common.ui_util")
-	local gameInstance = uiUtil and uiUtil.GetGameInstance and uiUtil.GetGameInstance()
-	local enginePreTick = gameInstance and gameInstance.EnginePreTick
-	if not enginePreTick or type(enginePreTick.Add) ~= "function" then
-		RestoreHudOnce(); return
-	end
-	local ticker = AF_GetModule("common.time_ticker")
-	if not ticker or type(ticker.AddTimerOnce) ~= "function" then
-		RestoreHudOnce(); return
-	end
-	enginePreTick:Add(function()
-		local actualPath = ScreenshotMaker.MakePictureByName(path, true)
-		if type(enginePreTick.Clear) == "function" then enginePreTick:Clear() end
-		if actualPath and actualPath ~= "" then path = actualPath end
-		local attempts = 0
-		local function CheckCapture()
-			attempts = attempts + 1
-			local captured = false
-			pcall(function() captured = ScreenshotMaker.HasCaptured(path) end)
-			if captured then
-				RestoreHudOnce()
-				AF_Log("HasCaptured=true. Flushing to disk via ResizePicture...")
-				pcall(ScreenshotMaker.ResizePicture, path, 0.9, path)
-				ticker.AddTimerOnce(2.0, function()
-					if #AF_ReadFile(path) > 0 then
-						AutoFeedback.SendFeedback(path, kills, rank, segment)
-					else
-						AF_Notify("[@BABYNOOB9] iOS image read error!")
-					end
-				end)
-			elseif attempts < 15 then
-				ticker.AddTimerOnce(1, CheckCapture)
-			else
-				RestoreHudOnce()
-				AF_Notify("[@BABYNOOB9] Screenshot capture failed!")
-			end
-		end
-		ticker.AddTimerOnce(1, CheckCapture)
-	end)
-end
-
-function AutoFeedback.ProcessWin(kills)
-	kills = tonumber(kills) or 0
-	local rank, segment = AF_GetRankAndSegment()
-	-- ✅ ALL RANKS SUPPORTED - Sirf kills check (kills > 0)
-	if kills <= 0 then
-		AF_Log(string.format("Skipping feedback: Kill %d (Requires Kill > 0)", kills))
-		return
-	end
-	AF_Notify("[@BABYNOOB9] Congratulations on getting TOP 1! Rank: " .. AF_GetRankName(rank))
-	local setHudHidden = AF_CreateHudController()
-	setHudHidden(true)
-	local ok, err = pcall(AF_CaptureAndSend, kills, rank, segment, setHudHidden)
-	if not ok then
-		setHudHidden(false)
-		AF_Log("ProcessWin Error: " .. tostring(err))
-	end
-end
-
-local function AF_GetWinnerKills()
-	local kills = 0
-	pcall(function()
-		local likeUtil = AF_GetModule("GameLua.Mod.BaseMod.Client.Like.IngameLikeUtilClient")
-		if likeUtil and type(likeUtil.GetMyPlayerState) == "function" then
-			local playerState = likeUtil.GetMyPlayerState()
-			if playerState and playerState.Kills then
-				kills = tonumber(playerState.Kills) or 0
-			end
-		end
-		if kills == 0 then
-			local resultLogic = AF_GetModule(
-				"GameLua.Mod.BaseMod.Client.BattleResult.BattleResultData.BattleResultDataLogic",
-				false
-			)
-			if resultLogic and type(resultLogic.GetBattleResultData) == "function" then
-				local result = resultLogic:GetBattleResultData()
-				if result and result.BP_mykill then
-					kills = tonumber(result.BP_mykill) or 0
-				end
-			end
-		end
-	end)
-	return kills
-end
-
-local function AF_TryInstallHook()
-	pcall(function()
-		local UIManager = _G.UIManager
-		if not UIManager or not UIManager.ShowUI then return end
-		if UIManager.__SRCHUBHooked then
-			UIManager.__SRCHUBHooked = false
-		end
-		AF_Log("Hooking UIManager.ShowUI for in-game Winner UI...")
-		local originalShowUI = UIManager.ShowUI
-		UIManager.ShowUI = function(config, params, ...)
-			local result = originalShowUI(config, params, ...)
-			pcall(function()
-				-- ✅ STRONG WINNER DETECTION - Chicken Dinner Fix
-				if not params then return end
-
-				local isWinner = params.Reason == "win"
-					or params.ShowedWinLogo == true
-					or params.IsWin == true
-					or params.IsWinner == true
-					or params.bWin == true
-					or params.Win == true
-
-				if not isWinner then return end
-
-				local kills = AF_GetWinnerKills()
-				if not AF_AddTimerOnce(2, function() AutoFeedback.ProcessWin(kills) end) then
-					AutoFeedback.ProcessWin(kills)
-				end
-			end)
-			return result
-		end
-		-- UIManager.__SRCHUBHooked = true
-		AF_Log("UIManager Hook installed successfully.")
-	end)
-end
-
-function AutoFeedback.Install()
-	AF_Log("Installing Pro system (Telegram)...")
-	if AutoFeedback.Config.TestMode then
-		pcall(function()
-			AF_AddTimerOnce(5.0, function() AutoFeedback.ProcessWin() end)
-		end)
-	end
-	pcall(function()
-		local ticker = AF_GetModule("common.time_ticker")
-		if ticker and type(ticker.AddTimer) == "function" then
-			ticker.AddTimer(3.0, AF_TryInstallHook)
-		else
-			AF_TryInstallHook()
-		end
-	end)
-end
-
-_G.GODxRJ_AutoFeedbackRecovered = AutoFeedback
-AutoFeedback.Install()
--- ============================================================
--- END AUTO FEEDBACK SYSTEM
--- ============================================================
-
-local CreditTextWidget = nil
-
-local function CreateCreditText()
-  if CreditTextWidget and slua.isValid(CreditTextWidget) then
-    return
-  end
-
-  pcall(function()
-    local txt = CGame:NewObjectFromPath("/Script/UMG.TextBlock")
-    if not txt or not slua.isValid(txt) then
-      return
-    end
-
-    local hud = require("game_frontend_hud")
-    if hud and hud.AddToContainer and UIContainers and UIContainers.Top then
-      hud.AddToContainer(UIContainers.Top, txt, 9999)
-    end
-
-    txt:SetText("TELEGRAM[ @BABYNOOB9 ]")
-    txt:SetColorAndOpacity(
-      FSlateColor(FLinearColor(0, 1, 0, 1))
-    )
-
-    if txt.Font then
-      local font = txt.Font
-      font.Size = 14
-      font.TypefaceFontName = "Bold"
-      txt.Font = font
-    end
-
-    local WidgetLayoutLibrary = import("WidgetLayoutLibrary")
-    if WidgetLayoutLibrary then
-      local slot = WidgetLayoutLibrary.SlotAsCanvasSlot(txt)
-
-      if slot then
-        slot:SetAnchors(FAnchors(0, 1, 0, 1))
-        slot:SetAlignment(FVector2D(0, 1))
-        slot:SetPosition(FVector2D(25, -45))
-        slot:SetSize(FVector2D(220, 30))
-      end
-    end
-
-    if UEnums and UEnums.ESlateVisibility then
-      txt:SetWidgetVisibility(
-        UEnums.ESlateVisibility.SelfHitTestInvisible
-      )
-    end
-
-    CreditTextWidget = txt
-  end)
-end
-
-pcall(CreateCreditText)
--- ========================================================================
--- CLASS DECLARATION
--- ========================================================================
 local class = require("class")
-local CharacterBase = require("GameLua.GameCore.Framework.CharacterBase")
-local BRCharacterClass = class(CharacterBase, nil, BRPlayerCharacterBase)
-
-return require("combine_class").DeclareFeature(BRCharacterClass, {
-    { SkyTransition = "GameLua.Mod.BaseMod.Gameplay.Feature.SkyControl.PlayerCharacterSkyTransitionFeature" },
-    { CarryDeadBoxFeature = "GameLua.Mod.Library.GamePlay.Feature.CarryDeadBoxFeature" },
-    { SpecialSuitFeature = "GameLua.Mod.Library.GamePlay.Feature.SpecialSuitFeature" },
-    { TeleportPawnFeature = "GameLua.Mod.Library.GamePlay.Feature.TeleportPawnFeature" },
-    { LifterControl = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.CharacterLifterControlFeature" },
-    { FinalKillEffect = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.PlayerCharacterFinalKillEffectFeature" },
-    { CampFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.Camp.PlayerCharacterCampFeature" },
-    { BuildSkateFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.PlayerCharacterBuildVehicleFeature" },
-    { CommonBornlandTransformFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.HeroPropFeature.CommonBornlandTransformFeature" },
-    { ParachuteFormation = "GameLua.Mod.BaseMod.GamePlay.Feature.ParachuteFormationFeature" }
+local CCharacterBase = require("GameLua.GameCore.Framework.CharacterBase")
+local CBRPlayerCharacterBase = class(CCharacterBase, nil, BRPlayerCharacterBase)
+return require("combine_class").DeclareFeature(CBRPlayerCharacterBase, {
+  { SkyTransition = "GameLua.Mod.BaseMod.Gameplay.Feature.SkyControl.PlayerCharacterSkyTransitionFeature" },
+  { CarryDeadBoxFeature = "GameLua.Mod.Library.GamePlay.Feature.CarryDeadBoxFeature" },
+  { SpecialSuitFeature = "GameLua.Mod.Library.GamePlay.Feature.SpecialSuitFeature" },
+  { TeleportPawnFeature = "GameLua.Mod.Library.GamePlay.Feature.TeleportPawnFeature" },
+  { LifterControl = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.CharacterLifterControlFeature" },
+  { FinalKillEffect = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.PlayerCharacterFinalKillEffectFeature" },
+  { CampFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.Camp.PlayerCharacterCampFeature" },
+  { BuildSkateFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.PlayerCharacterBuildVehicleFeature" },
+  { CommonBornlandTransformFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.HeroPropFeature.CommonBornlandTransformFeature" },
+  { ParachuteFormation = "GameLua.Mod.BaseMod.GamePlay.Feature.ParachuteFormationFeature" }
 }, "BRPlayerCharacterBase")
---------Join us for more https://t.me/AttcTrDevelopers---------@AttcConfigTechnician ---------
