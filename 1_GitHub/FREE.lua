@@ -900,7 +900,7 @@ end
 end
 
 -- ============================================================================
--- FULL LICENSE KEY SYSTEM (Lua)
+-- FULL LICENSE KEY SYSTEM (FIXED SYNTAX)
 -- API: https://cnc-web.online/verify_key.php
 -- ============================================================================
 local LicenseSystem = {}
@@ -908,30 +908,41 @@ local HMAC_SECRET = "BNT_HMAC_SECRET_2026_v10_keep_this_safe"
 local API_URL = "https://cnc-web.online/verify_key.php"
 local SESSION_FILE = "/storage/emulated/0/Documents/BNT_LUA_TOOL/.license_session"
 
--- ============================================================================
--- HELPER: MD5 HASH (Pure Lua)
--- ============================================================================
+-- Helper: Bitwise operations for Lua 5.3+
+local function bxor(a, b)
+    local result, bit = 0, 1
+    while a > 0 or b > 0 do
+        local a_bit, b_bit = a % 2, b % 2
+        if a_bit ~= b_bit then result = result + bit end
+        a, b, bit = math.floor(a / 2), math.floor(b / 2), bit * 2
+    end
+    return result
+end
+
+local function band(a, b)
+    local result, bit = 0, 1
+    while a > 0 or b > 0 do
+        local a_bit, b_bit = a % 2, b % 2
+        if a_bit == 1 and b_bit == 1 then result = result + bit end
+        a, b, bit = math.floor(a / 2), math.floor(b / 2), bit * 2
+    end
+    return result
+end
+
+local function ror(v, n)
+    local mask = 0xFFFFFFFF
+    v = v % (mask + 1)
+    return math.floor(v / 2^n) + (v % 2^n) * 2^(32-n)
+end
+
+local function rol(v, n)
+    local mask = 0xFFFFFFFF
+    v = v % (mask + 1)
+    return ((v * 2^n) % (mask + 1)) + math.floor(v / 2^(32-n))
+end
+
+-- Helper: MD5 Hash (Pure Lua)
 local function md5(input)
-    local function bitop(a, b, op)
-        local result, bit = 0, 1
-        while a > 0 or b > 0 do
-            local a_bit, b_bit = a % 2, b % 2
-            if op == "and" then
-                if a_bit == 1 and b_bit == 1 then result = result + bit end
-            elseif op == "xor" then
-                if a_bit ~= b_bit then result = result + bit end
-            end
-            a, b, bit = math.floor(a / 2), math.floor(b / 2), bit * 2
-        end
-        return result
-    end
-    
-    local function rol(v, n)
-        local mask = 0xFFFFFFFF
-        v = v % (mask + 1)
-        return ((v * 2^n) % (mask + 1)) + math.floor(v / 2^(32-n))
-    end
-    
     local K = {
         0xd76aa478,0xe8c7b756,0x242070db,0xc1bdceee,0xf57c0faf,0x4787c62a,0xa8304613,0xfd469501,
         0x698098d8,0x8b44f7af,0xffff5bb1,0x895cd7be,0x6b901122,0xfd987193,0xa679438e,0x49b40821,
@@ -946,7 +957,6 @@ local function md5(input)
     
     local size = #input
     local message = input .. string.char(128) .. string.rep(string.char(0), (55 - size) % 64)
-    -- Add length in bits (little endian)
     local bit_len = size * 8
     for i = 1, 8 do
         message = message .. string.char(math.floor(bit_len / 2^((i-1)*8)) % 256)
@@ -967,16 +977,16 @@ local function md5(input)
         for j = 0, 63 do
             local f, g
             if j < 16 then
-                f = bitop(b, c, "and") + bitop(bitop(b, 0xFFFFFFFF, "xor") or 0, d, "and")
+                f = band(b, c) + band(bxor(0xFFFFFFFF, b), d)
                 g = j
             elseif j < 32 then
-                f = bitop(d, b, "and") + bitop(bitop(d, 0xFFFFFFFF, "xor") or 0, c, "and")
+                f = band(d, b) + band(bxor(0xFFFFFFFF, d), c)
                 g = (5*j + 1) % 16
             elseif j < 48 then
-                f = bitop(bitop(b, c, "xor") or 0, d, "xor")
+                f = bxor(bxor(b, c), d)
                 g = (3*j + 5) % 16
             else
-                f = bitop(c, bitop(b, 0xFFFFFFFF, "xor") or 0, "xor")
+                f = bxor(c, bxor(0xFFFFFFFF, b))
                 g = (7*j) % 16
             end
             
@@ -1006,28 +1016,8 @@ local function md5(input)
     return to_hex(h0) .. to_hex(h1) .. to_hex(h2) .. to_hex(h3)
 end
 
--- ============================================================================
--- HELPER: HMAC-SHA256 (Pure Lua)
--- ============================================================================
+-- Helper: SHA256 & HMAC
 local function sha256(input)
-    local function bitop(a, b, op)
-        local result, bit = 0, 1
-        while a > 0 or b > 0 do
-            local a_bit, b_bit = a % 2, b % 2
-            if op == "and" then
-                if a_bit == 1 and b_bit == 1 then result = result + bit end
-            elseif op == "xor" then
-                if a_bit ~= b_bit then result = result + bit end
-            end
-            a, b, bit = math.floor(a / 2), math.floor(b / 2), bit * 2
-        end
-        return result
-    end
-    
-    local function ror(v, n)
-        return math.floor(v / 2^n) + (v % 2^n) * 2^(32-n)
-    end
-    
     local K = {
         0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
         0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
@@ -1057,23 +1047,19 @@ local function sha256(input)
             w[j] = a + b*256 + c*65536 + d*16777216
         end
         for j = 16, 63 do
-            local s0 = bitop(ror(w[j-15], 7), ror(w[j-15], 18), "xor")
-            s0 = bitop(s0, math.floor(w[j-15] / 2^3), "xor")
-            local s1 = bitop(ror(w[j-2], 17), ror(w[j-2], 19), "xor")
-            s1 = bitop(s1, math.floor(w[j-2] / 2^10), "xor")
+            local s0 = bxor(bxor(ror(w[j-15], 7), ror(w[j-15], 18)), math.floor(w[j-15] / 2^3))
+            local s1 = bxor(bxor(ror(w[j-2], 17), ror(w[j-2], 19)), math.floor(w[j-2] / 2^10))
             w[j] = (w[j-16] + s0 + w[j-7] + s1) % 0x100000000
         end
         
         local a, b, c, d, e, f, g, h = h0, h1, h2, h3, h4, h5, h6, h7
         
         for j = 0, 63 do
-            local S1 = bitop(ror(e, 6), ror(e, 11), "xor")
-            S1 = bitop(S1, ror(e, 25), "xor")
-            local ch = bitop(e, f, "and") + bitop(bitop(e, 0xFFFFFFFF, "xor") or 0, g, "and")
+            local S1 = bxor(bxor(ror(e, 6), ror(e, 11)), ror(e, 25))
+            local ch = band(e, f) + band(bxor(0xFFFFFFFF, e), g)
             local temp1 = (h + S1 + ch + K[j+1] + w[j]) % 0x100000000
-            local S0 = bitop(ror(a, 2), ror(a, 13), "xor")
-            S0 = bitop(S0, ror(a, 22), "xor")
-            local maj = bitop(a, b, "and") + bitop(a, c, "and") + bitop(b, c, "and")
+            local S0 = bxor(bxor(ror(a, 2), ror(a, 13)), ror(a, 22))
+            local maj = band(a, b) + band(a, c) + band(b, c)
             local temp2 = (S0 + maj) % 0x100000000
             
             h = g
@@ -1120,25 +1106,19 @@ local function hmac_sha256(key, message)
     local i_key_pad = ""
     for i = 1, block_size do
         local byte = key:byte(i)
-        o_key_pad = o_key_pad .. string.char(bitop(byte, 0x5c, "xor"))
-        i_key_pad = i_key_pad .. string.char(bitop(byte, 0x36, "xor"))
+        o_key_pad = o_key_pad .. string.char(bxor(byte, 0x5c))
+        i_key_pad = i_key_pad .. string.char(bxor(byte, 0x36))
     end
     
     return sha256(o_key_pad .. sha256(i_key_pad .. message))
 end
 
--- ============================================================================
--- HELPER: URL ENCODE
--- ============================================================================
 local function url_encode(str)
     return (str:gsub("([^%w%-%._~ ])", function(c)
         return string.format("%%%02X", string.byte(c))
     end):gsub(" ", "+"))
 end
 
--- ============================================================================
--- HELPER: BASE64 ENCODE/DECODE
--- ============================================================================
 local b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 local function base64_encode(data)
     return ((data:gsub('.', function(x)
@@ -1168,71 +1148,46 @@ local function base64_decode(data)
     end))
 end
 
--- ============================================================================
--- DEVICE ID GENERATOR
--- ============================================================================
 local function get_device_id()
     local parts = {}
-    
-    -- Try Android ID
     pcall(function()
         local handle = io.popen("settings get secure android_id 2>/dev/null")
         if handle then
-            local result = handle:read("*a")
+            local result = handle:read("*a"):gsub("%s", "")
             handle:close()
-            if result and result ~= "null" and #result > 3 then
-                table.insert(parts, "AID:" .. result:gsub("%s", ""))
-            end
+            if result and result ~= "null" and #result > 3 then table.insert(parts, "AID:" .. result) end
         end
     end)
-    
-    -- Try Serial Number
     pcall(function()
         local handle = io.popen("getprop ro.serialno 2>/dev/null")
         if handle then
-            local result = handle:read("*a")
+            local result = handle:read("*a"):gsub("%s", "")
             handle:close()
-            if result and result ~= "unknown" and #result > 2 then
-                table.insert(parts, "SER:" .. result:gsub("%s", ""))
-            end
+            if result and result ~= "unknown" and #result > 2 then table.insert(parts, "SER:" .. result) end
         end
     end)
-    
-    -- Try Build Fingerprint
     pcall(function()
         local handle = io.popen("getprop ro.build.fingerprint 2>/dev/null")
         if handle then
-            local result = handle:read("*a")
+            local result = handle:read("*a"):gsub("%s", "")
             handle:close()
-            if result and #result > 3 then
-                table.insert(parts, "FP:" .. result:gsub("%s", ""))
-            end
+            if result and #result > 3 then table.insert(parts, "FP:" .. result) end
         end
     end)
-    
-    -- Try Board Platform
     pcall(function()
         local handle = io.popen("getprop ro.board.platform 2>/dev/null")
         if handle then
-            local result = handle:read("*a")
+            local result = handle:read("*a"):gsub("%s", "")
             handle:close()
-            if result and #result > 1 then
-                table.insert(parts, "BRD:" .. result:gsub("%s", ""))
-            end
+            if result and #result > 1 then table.insert(parts, "BRD:" .. result) end
         end
     end)
-    
     if #parts == 0 then
-        -- Fallback: use os.time() + random
         parts = { "FALLBACK:" .. tostring(os.time()) .. "_" .. tostring(math.random(100000, 999999)) }
     end
-    
     return sha256(table.concat(parts, "|")):sub(1, 32)
 end
 
--- ============================================================================
--- SESSION MANAGEMENT
--- ============================================================================
 local function save_session(key, expires_at, device_id)
     pcall(function()
         local data = "KEY:" .. base64_encode(key) .. "\n" ..
@@ -1240,11 +1195,7 @@ local function save_session(key, expires_at, device_id)
                      "DEVICE:" .. device_id .. "\n" ..
                      "TIME:" .. tostring(os.time())
         local file = io.open(SESSION_FILE, "w")
-        if file then
-            file:write(data)
-            file:close()
-            return true
-        end
+        if file then file:write(data); file:close(); return true end
     end)
     return false
 end
@@ -1253,36 +1204,21 @@ local function load_session()
     pcall(function()
         local file = io.open(SESSION_FILE, "r")
         if file then
-            local content = file:read("*a")
-            file:close()
-            
+            local content = file:read("*a"); file:close()
             local key = content:match("KEY:([^\n]+)")
             local expires = content:match("EXPIRES:([^\n]+)")
             local device = content:match("DEVICE:([^\n]+)")
-            
-            if key then
-                key = base64_decode(key)
-            end
-            
-            return {
-                key = key,
-                expires_at = tonumber(expires) or 0,
-                device_id = device
-            }
+            if key then key = base64_decode(key) end
+            return { key = key, expires_at = tonumber(expires) or 0, device_id = device }
         end
     end)
     return nil
 end
 
 local function clear_session()
-    pcall(function()
-        os.remove(SESSION_FILE)
-    end)
+    pcall(function() os.remove(SESSION_FILE) end)
 end
 
--- ============================================================================
--- HTTP REQUEST (Using game's HTTP manager)
--- ============================================================================
 local function http_post(url, headers, body, callback)
     pcall(function()
         local http = ModuleManager and ModuleManager.GetModule(ModuleManager.CommonModuleConfig.http_manager)
@@ -1291,48 +1227,30 @@ local function http_post(url, headers, body, callback)
             return true
         end
     end)
-    
-    -- Fallback: Use slua http if available
-    pcall(function()
-        local HttpRequest = import("HttpRequest")
-        if HttpRequest then
-            -- Fallback implementation
-        end
-    end)
-    
     return false
 end
 
--- ============================================================================
--- LICENSE VERIFICATION
--- ============================================================================
 local function verify_license(key, device_id, callback)
     local timestamp = tostring(os.time())
     local payload_data = key .. "|" .. device_id .. "|" .. timestamp
     local signature = hmac_sha256(HMAC_SECRET, payload_data)
-    
     local body = "key=" .. url_encode(key) ..
                  "&device_id=" .. url_encode(device_id) ..
                  "&timestamp=" .. url_encode(timestamp) ..
                  "&signature=" .. url_encode(signature) ..
                  "&tool_version=v10.6"
-    
     local headers = {
         ["Content-Type"] = "application/x-www-form-urlencoded",
         ["User-Agent"] = "BNT-Lua-Tool/v10.6"
     }
-    
     http_post(API_URL, headers, body, function(response)
         local success = false
         local expires_at = nil
         local error_msg = "Unknown error"
-        
         pcall(function()
-            -- Parse JSON response (simple parser)
             local status = response:match('"status"%s*:%s*"([^"]+)"')
             local message = response:match('"message"%s*:%s*"([^"]+)"')
             local expires = response:match('"expires_at"%s*:%s*"([^"]+)"')
-            
             if status == "success" then
                 success = true
                 expires_at = expires or "N/A"
@@ -1340,22 +1258,16 @@ local function verify_license(key, device_id, callback)
                 error_msg = message or "Invalid key"
             end
         end)
-        
         callback(success, expires_at, error_msg)
     end)
 end
 
--- ============================================================================
--- MAIN LICENSE CHECK FUNCTION
--- ============================================================================
 local function CheckLicense()
     local device_id = get_device_id()
     print("[License] Device ID: " .. device_id:sub(1, 16) .. "...")
     
-    -- 1. Check session
     local session = load_session()
     if session and session.device_id == device_id then
-        -- Check if expired (if expires_at is a timestamp)
         local expiry_time = tonumber(session.expires_at)
         if expiry_time and expiry_time > 0 and os.time() > expiry_time then
             print("[License] Session expired")
@@ -1366,26 +1278,14 @@ local function CheckLicense()
         end
     end
     
-    -- 2. Need new key
     print("[License] Please enter your license key:")
     local key = nil
-    pcall(function()
-        key = io.read("*l")
-    end)
+    pcall(function() key = io.read("*l") end)
     
-    if not key or key == "" then
-        print("[License] No key provided")
-        return false, nil
-    end
-    
+    if not key or key == "" then print("[License] No key provided"); return false, nil end
     key = key:gsub("^%s+", ""):gsub("%s+$", ""):upper()
+    if #key < 8 then print("[License] Key too short"); return false, nil end
     
-    if #key < 8 then
-        print("[License] Key too short")
-        return false, nil
-    end
-    
-    -- 3. Verify with server
     print("[License] Verifying with server...")
     local verified = false
     local final_key = nil
@@ -1402,24 +1302,16 @@ local function CheckLicense()
         end
     end)
     
-    -- Wait for callback
     local timeout = os.time() + 15
-    while not verified and os.time() < timeout do
-        -- Busy wait
-    end
-    
+    while not verified and os.time() < timeout do end
     return verified, final_key
 end
 
--- ============================================================================
--- AUTO-CHECK ON LOAD
--- ============================================================================
 _G.LicenseSystem = LicenseSystem
 _G.CheckLicense = CheckLicense
 _G.GetLicenseDeviceID = get_device_id
 _G.ClearLicenseSession = clear_session
 
--- Auto-check if in Client mode
 if Client then
     local ok, licensed = pcall(CheckLicense)
     if not ok or not licensed then
@@ -1427,8 +1319,8 @@ if Client then
     end
 end
 
-return LicenseSystem
 
+-- ============================================================================
 local function ShowBNTMODVIPMenu() 
     if _G.BNTMODMenuAlreadyShown then return end
     if _G.BNTMODState.MenuStep ~= 0 then return end
@@ -2952,6 +2844,7 @@ end
 
 if not isExpired then
     pcall(function() require("common.time_ticker").AddTimerOnce(0.5, InitAllModSystems) end)
+    return LicenseSystem
 end
 
 local class = require("class")
